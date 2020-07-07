@@ -3,7 +3,7 @@
 ```
 常用的名词
 schema 架构
-mutation 突变
+mutation 突变 或者 突变操作
 predicate 谓词
 ```
 ## Dgraph
