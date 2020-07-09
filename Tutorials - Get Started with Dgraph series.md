@@ -11,7 +11,7 @@
 ## [3-基本类型及其操作](https://github.com/friendmine/dgraphmanual/blob/master/Get%20Started%20with%20Dgraph%20-%20Basic%20Types%20and%20Operations%20on%20them.md)
 了解数据类型，索引，过滤和反向遍历。
 
-## [4-多语言字符串]([https://github.com/friendmine/dgraphmanual/Get Started with Dgraph - Multi-language strings.md](https://github.com/friendmine/dgraphmanual/blob/master/Get%20Started%20with%20Dgraph%20-%20Multi-language%20strings.md))
+## [4-多语言字符串]([https://github.com/friendmine/dgraphmanual/blob/master/Get%20Started%20with%20Dgraph%20-%20Multi-language%20strings.md])
 使用语言标签，关于多语言字符串及其操作。
 
 ## [5-字符串索引和建模Twitter](https://github.com/friendmine/dgraphmanual/blob/master/Get%20Started%20with%20Dgraph%20-%20String%20Indices%20and%20Modeling%20Tweet%20Graph.md)
