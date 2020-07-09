@@ -7,7 +7,7 @@
 
 [知乎专栏 图数据库](https://zhuanlan.zhihu.com/c_1222911919302107136)
 
-完成第一部分
-[入门介绍](https://github.com/friendmine/dgraphmanual/blob/master/Tutorials%20-%20Get%20Started%20with%20Dgraph%20series.md)
+完成第一部分    
+[入门介绍教程共八篇](https://github.com/friendmine/dgraphmanual/blob/master/Tutorials%20-%20Get%20Started%20with%20Dgraph%20series.md)
 
 必须得声明一下，所有手册中出现的 英文原文， 图的版权都是属于 @DGraph 的。
