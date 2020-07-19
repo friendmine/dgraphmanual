@@ -858,5 +858,344 @@ Dgraph将bleve用于全文搜索索引。 另请参阅特定于bleve语言的停
 ```
 结果
 ```
-
+{
+  "data": {
+    "stevens": [
+      {
+        "name@en": "Steven Wilsey",
+        "numFilms": 1
+      },
+      {
+        "name@en": "Steven Bratter",
+        "numFilms": 1
+      },
+      {
+        "name@en": "Steven Saussey",
+        "numFilms": 1
+      }
+    ]
+  }
+}
 ```  
+小于，小于等于，大于，大于等于
+语法示例：不等式IE
+
+- IE(predicate, value)
+- IE(val(varName), value)
+- IE(predicate, val(varName))
+- IE(count(predicate), value)
+
+类似的还有
+- le 小于或等于
+- lt 小于
+- ge 大于或等于
+- gt 大于
+  
+这些可以用于的类型有：int，float，string，dateTime
+
+需要索引：在查询根结点中使用IE(predicate, ...)格式（请参见下表）时需要索引。 对于查询根的count（predicate），需要@count索引。 对于变量，由于值已作为查询的一部分进行计算，因此不需要索引。
+
+|类型|索引选项|
+|--|--|
+|int |int|
+|float|float|
+|string|exact|
+|dateTime| dateTime|
+
+查询示例：1980年之前发行的Ridley Scott电影。
+```
+{
+  me(func: eq(name@en, "Ridley Scott")) {
+    name@en
+    director.film @filter(lt(initial_release_date, "1980-01-01"))  {
+      initial_release_date
+      name@en
+    }
+  }
+}
+```
+结果
+```
+{
+  "data": {
+    "me": [
+      {
+        "name@en": "Ridley Scott",
+        "director.film": [
+          {
+            "initial_release_date": "1979-05-25T00:00:00Z",
+            "name@en": "Alien"
+          },
+          {
+            "initial_release_date": "1977-12-01T00:00:00Z",
+            "name@en": "The Duellists"
+          }
+        ]
+      },
+      {
+        "name@en": "Ridley Scott"
+      }
+    ]
+  }
+```
+查询示例：导演姓名为Steven，导演超过100位演员的电影。
+```
+{
+  ID as var(func: allofterms(name@en, "Steven")) {
+    director.film {
+      num_actors as count(starring)
+    }
+    total as sum(val(num_actors))
+  }
+
+  dirs(func: uid(ID)) @filter(gt(val(total), 100)) {
+    name@en
+    total_actors : val(total)
+  }
+}
+```
+结果
+```
+{
+  "data": {
+    "dirs": [
+      {
+        "name@en": "Steven Conrad",
+        "total_actors": 122
+      },
+      {
+        "name@en": "Steven Knight",
+        "total_actors": 102
+      },
+      {
+        "name@en": "Steven Zaillian",
+        "total_actors": 123
+      }
+    ]
+  }
+}
+```
+查询示例：每种超过30000部电影的流派的一部电影。 由于没有在类型上指定顺序，因此该顺序将由UID决定。 计算是通过边的数目来完成的，然后进行其它部分的查询。
+```
+{
+  genre(func: gt(count(~genre), 30000)){
+    name@en
+    ~genre (first:1) {
+      name@en
+    }
+  }
+}
+```
+结果
+```
+{
+  "data": {
+    "genre": [
+      {
+        "name@en": "Documentary film",
+        "~genre": [
+          {
+            "name@en": "Wild Things"
+          }
+        ]
+      },
+      {
+        "name@en": "Drama",
+        "~genre": [
+          {
+            "name@en": "José María y María José: Una pareja de hoy"
+          }
+        ]
+      },
+      {
+        "name@en": "Comedy",
+        "~genre": [
+          {
+            "name@en": "José María y María José: Una pareja de hoy"
+          }
+        ]
+      },
+      {
+        "name@en": "Short Film",
+        "~genre": [
+          {
+            "name@en": "Side Effects"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+查询示例：导演是Steven及其电影的initial_release_date大于电影《少数派报告》的电影。
+```
+{
+  var(func: eq(name@en,"Minority Report")) {
+    d as initial_release_date
+  }
+
+  me(func: eq(name@en, "Steven Spielberg")) {
+    name@en
+    director.film @filter(ge(initial_release_date, val(d))) {
+      initial_release_date
+      name@en
+    }
+  }
+}
+```
+结果
+```
+{
+  "data": {
+    "me": [
+      {
+        "name@en": "Steven Spielberg",
+        "director.film": [
+          {
+            "initial_release_date": "2012-10-08T00:00:00Z",
+            "name@en": "Lincoln"
+          },
+          {
+            "initial_release_date": "2011-12-04T00:00:00Z",
+            "name@en": "War Horse"
+          }
+        ]
+      }
+    ]
+  }
+}
+
+## uid
+语法示例：
+
+- q(func: uid(<uid>))
+- predicate @filter(uid(<uid1>, ..., <uidn>))
+- predicate @filter(uid(a)) for variable a
+- q(func: uid(a,b)) for variables a and b
+在当前过滤的查询中限定出UIDs指定的结点。
+
+对于查询变量a，uid（a）代表存储在a中的UID集。 对于值变量b，uid（b）表示从UID到值映射的UID。 如果有两个或多个变量，uid（a，b，...）表示所有变量的并集。
+
+uid（<uid>）就像一个身份查询函数一样，即使节点没有任何边，也将返回请求的结点的UID。
+
+查询示例：如果已知某节点的UID，则可以直接读取该节点的值。 如知道Priyanka Chopra这部电影的UID
+```
+{
+  films(func: uid(0x2c964)) {
+    name@hi
+    actor.film {
+      performance.film {
+        name@hi
+      }
+    }
+  }
+}
+```
+结果
+```
+{
+  "data": {
+    "films": [
+      {
+        "name@hi": "प्रियंका चोपड़ा",
+        "actor.film": [
+          {
+            "performance.film": [
+              {
+                "name@hi": "यकीन"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+查询示例：按流派划分的Taraji Henson的电影。
+```
+{
+  var(func: allofterms(name@en, "Taraji Henson")) {
+    actor.film {
+      F as performance.film {
+        G as genre
+      }
+    }
+  }
+
+  Taraji_films_by_genre(func: uid(G)) {
+    genre_name : name@en
+    films : ~genre @filter(uid(F)) {
+      film_name : name@en
+    }
+  }
+}
+```
+结果
+```
+
+  "data": {
+    "Taraji_films_by_genre": [
+      {
+        "genre_name": "War film",
+        "films": [
+          {
+            "film_name": "Talk to Me"
+          }
+        ]
+      },
+      {
+        "genre_name": "Horror",
+        "films": [
+          {
+            "film_name": "Satan's School for Girls"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+查询示例：按流派数量排序Taraji Henson的电影，并按Taraji在每种流派制作了多少部电影的顺序列出了流派。
+
+```
+{
+  var(func: allofterms(name@en, "Taraji Henson")) {
+    actor.film {
+      F as performance.film {
+        G as count(genre)
+        genre {
+          C as count(~genre @filter(uid(F)))
+        }
+      }
+    }
+  }
+
+  Taraji_films_by_genre_count(func: uid(G), orderdesc: val(G)) {
+    film_name : name@en
+    genres : genre (orderdesc: val(C)) {
+      genre_name : name@en
+    }
+  }
+}
+```
+结果
+```
+{
+  "data": {
+    "Taraji_films_by_genre_count": [
+      {
+        "film_name": "Date Night",
+        "genres": [
+          {
+            "genre_name": "Comedy"
+          },
+          {
+            "genre_name": "Crime Fiction"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
