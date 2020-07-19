@@ -588,3 +588,275 @@ Schema类型：字符串
   }
 }
 ```
+## 正则表达式
+语法示例：regexp(predicate, /regular-expression/) 或不区分大小写的 regexp(predicate, /regular-expression/i) 
+
+模式类型：字符串
+
+所需索引：trigram
+
+因为整个程序是用go开发的，所以通过正则表达式匹配字符串要有go的正则表达式。
+
+查询示例：在根结点下，将节点的name与开头是'Steven Sp'匹配，后跟任意字符。 对于每个匹配的uid，匹配包含ryan的影片。 注意与allofterms的区别，allofterm仅匹配ryan，但正则表达式搜索也将匹配（如bryan）。
+```
+{
+  directors(func: regexp(name@en, /^Steven Sp.*$/)) {
+    name@en
+    director.film @filter(regexp(name@en, /ryan/i)) {
+      name@en
+    }
+  }
+}
+```
+结果
+```
+{
+  "data": {
+    "directors": [
+      {
+        "name@en": "Steven Spencer"
+      },
+      {
+        "name@en": "Steven Spielberg",
+        "director.film": [
+          {
+            "name@en": "Saving Private Ryan"
+          }
+        ]
+      },
+      {
+        "name@en": "Steven Spielberg And The Return To Film School"
+      },
+      {
+        "name@en": "Steven Spohn"
+      },
+      {
+        "name@en": "Steven Spurrier"
+      }
+    ]
+  }
+}
+```
+## 技术细节
+Trigram是三个连续符文的子串。例如，Dgraph具有字母Dgr，gra，rap，aph。
+
+为了确保正则表达式匹配的效率，Dgraph使用Trigram索引。也就是说，Dgraph将正则表达式转换为Trigram查询，使用Trigram索引和Trigram查询查找可能的匹配项，并将完整的正则表达式搜索仅应用在可能的匹配项上。
+
+## 编写有效的正则表达式和限制
+设计正则表达式查询时，请牢记以下几点。
+
+- 正则表达式必须至少匹配一个三字母组（不支持短于3个符文的模式）。也就是说，Dgraph需要可以转换为三元组查询的正则表达式。
+- 正则表达式匹配的三字母组的数量应尽可能小（[a-zA-Z] [a-zA-Z] [0-9]不是一个好主意）。太多可能的正则表达式匹配意味着对字符串做全文匹配；如果表达式能强制执行更多的三元组来匹配，则Dgraph可以更好地利用索引，并针对较小的可能匹配集来完成完整的正则表达式匹配。
+- 因此，正则表达式应尽可能精确。匹配更长的字符串意味着需要更多的三字母组合，这有助于有效地使用索引。
+- 如果使用重复表达式（*，+，？，{n，m}），那么整个正则表达式不会与空字符串或任意字符串匹配：例如，*可以像[Aa]bcd*那样使用，但不能像（abcd)*或（abcd)|((defg)*）
+- 方括号表达式（例如[fgh]{7}，[0-9]+或[a-z]{3,5}）之后的重复规范通常被视为与任何字符串匹配，因为它们会与太多的三字组匹配。
+- 如果在索引扫描期间部分结果（用于三字母组的子集）超过1000000个uid，则停止查询以禁止进行如此昂贵的查询。
+
+## 模糊匹配
+语法：match(predicate, string, distance)
+
+模式类型：string
+
+所需索引：trigram
+
+通过计算到字符串的Levenshtein距离来匹配谓词值，也称为模糊匹配。距离参数必须大于零（0)。使用较大的距离值可能会产生更多但不太准确的结果。
+
+查询示例：从根结点上开始，模糊匹配节点类似于Stephen，其距离值小于或等于8。
+```
+{
+  directors(func: match(name@en, Stephen, 8)) {
+    name@en
+  }
+}
+```
+结果
+```
+{
+  "data": {
+    "directors": [
+      {
+        "name@en": "Stephen Chen"
+      },
+      {
+        "name@en": "Step Up 3D"
+      }
+    ]
+  }
+}  
+```
+再查一个Levenshtein distance是3的
+```
+{
+  directors(func: match(name@en, Stephen, 3)) {
+    name@en
+  }
+}
+```
+结果
+```
+{
+  "data": {
+    "directors": [
+      {
+        "name@en": "Steve"
+      },
+      {
+        "name@en": "Steel"
+      }
+    ]
+  }
+}
+```
+## 全文搜索
+语法示例：alloftext(predicate, "space-separated text") 和anyoftext(predicate, "space-separated text")
+
+模式类型：string
+
+所需索引：全文/fulltext
+
+全文搜索是会应用词干和停用词技术进行的，以查找与所有或任何给定文本匹配的字符串。
+
+在索引生成过程中将应用以下步骤并处理全文搜索参数：
+
+1. Token化根据Unicode字边界）。
+2. 转换为小写。
+3. Unicode正则化（规范化形式为KC）。
+4. 使用特定于语言的词干提取器（如果语言支持）。
+5. 删除停止单词（如果语言支持）。
+Dgraph将bleve用于全文搜索索引。 另请参阅特定于bleve语言的停止词列表。
+
+下表包含所有支持的语言，相应的国家/地区代码，词干和停用词的过滤支持。
+|Language|	Country Code|	Stemming|	Stop words|
+|--|--|--|--|
+|Arabic	|ar	|✓	|✓|
+|Armenian|	hy|	|	✓|
+|Basque|	eu|	|	✓|
+|Bulgarian|	bg|	|	✓|
+|Catalan|	ca|	|	✓|
+|Chinese|	zh|	✓	|✓|
+|Czech|	cs|	|	✓|
+|Danish|	da|	✓	|✓|
+|Dutch	|nl|	✓|	✓|
+|English|	en	|✓|	✓|
+|Finnish|	fi|	✓	|✓|
+|French|	fr|	✓|	✓|
+|Gaelic|	ga|		|✓|
+|Galician	|gl	|	|✓|
+|German	|de	|✓|	✓|
+|Greek|	el	|	|✓|
+|Hindi	|hi|	✓	|✓|
+|Hungarian|	hu|	✓|	✓|
+|Indonesian	|id|	|	✓|
+|Italian|	it|	✓	|✓|
+|Japanese	|ja|	✓|	✓|
+|Korean	|ko|	✓|	✓|
+|Norwegian|	no|	✓	|✓|
+|Persian|	fa|	|	✓|
+|Portuguese	|pt|	✓	|✓|
+|Romanian	|ro|	✓	|✓|
+|Russian	|ru	|✓|	✓|
+|Spanish|	es	|✓|	✓|
+|Swedish|	sv|	✓|	✓|
+|Turkish|	tr|	✓	|✓|
+查询示例：具有dog，dogs，bark，barks，barking等的所有名称。停止词the which 会被删除掉。
+```
+{
+  movie(func:alloftext(name@en, "the dog which barks")) {
+    name@en
+  }
+}
+```
+结果
+```
+{
+  "data": {
+    "movie": [
+      {
+        "name@en": "Black Dogs Barking"
+      },
+      {
+        "name@en": "Barking Dog"
+      },
+      {
+        "name@en": "Barking Dog"
+      }
+    ]
+  }
+}
+```
+## 等量关系
+等于
+语法示例：
+
+- eq(predicate, value)
+- eq(val(varName), value)
+- eq(predicate, val(varName))
+- eq(count(predicate), value)
+- eq(predicate, [val1, val2, ..., valN])
+- eq(predicate, [$var1, "value", ..., $varN])
+
+模式类型：int，float，bool，string，dateTime
+
+需要索引：在查询根结点使用eq（predicate，...）格式（请参见下表）时是需要索引。 对于查询根的count（predicate），需要@count索引。 对于变量，因为值已作为查询的一部分进行计算，因此不需要索引。
+
+|类型|索引选项|
+|--|--|
+|int|	int|
+|float|	float|
+|bool|	bool|
+|string	|exact, hash|
+|dateTime	|dateTime|
+测试谓词或变量值的相等性，或在值列表中查找相等的值。
+
+布尔常量是true和false，因此对于eq来说，它变为eq(boolPred, true)。
+
+查询示例：电影类型恰好为十三种。
+```
+{
+  me(func: eq(count(genre), 13)) {
+    name@en
+    genre {
+      name@en
+    }
+  }
+}
+```
+输出
+```
+{
+  "data": {
+    "me": [
+      {
+        "name@en": "Stay Tuned",
+        "genre": [
+          {
+            "name@en": "Horror"
+          },
+          {
+            "name@en": "Thriller"
+          },
+          {
+            "name@en": "Family"
+          }
+        ]
+      }
+  }
+}
+```
+查询示例：导演史蒂文（Steven）导演了1,2或3部电影。
+```
+{
+  steve as var(func: allofterms(name@en, "Steven")) {
+    films as count(director.film)
+  }
+
+  stevens(func: uid(steve)) @filter(eq(val(films), [1,2,3])) {
+    name@en
+    numFilms : val(films)
+  }
+}
+```
+结果
+```
+
+```  
