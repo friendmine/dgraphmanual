@@ -1198,4 +1198,285 @@ uid（<uid>）就像一个身份查询函数一样，即使节点没有任何边
   }
 }
 ```
+## uid_in
+语法示例：
 
+- q(func: ...) @filter(uid_in(predicate, <uid>))
+- predicate1 @filter(uid_in(predicate2, <uid>))
+架构类型：UID
+
+所需索引：无
+
+uid函数是基于UID过滤当前级别的节点，而uid_in函数允许沿边检查其是否关联到特定的UID。 这通常可以节省额外的查询块，并避免返回边。
+
+uid_in不能在根结点下使用，它接受一个UID常量作为其参数（而不是变量）。
+
+查询示例：Marc Caro和Jean-Pierre Jeunet（UID 0x99706）的合作。 如果Jean-Pierre Jeunet的UID是已知的，则以这种方式进行查询就无需额外的代码将其UID提取到变量中，并且也无需额外的针对〜director.film的遍历和筛选。
+```
+{
+  caro(func: eq(name@en, "Marc Caro")) {
+    name@en
+    director.film @filter(uid_in(~director.film, 0x99706)) {
+      name@en
+    }
+  }
+}
+```
+结果
+```
+{
+  "data": {
+    "caro": [
+      {
+        "name@en": "Marc Caro"
+      }
+    ]
+  }
+}
+```
+## has
+语法示例：has(predicate)
+
+模式类型：全部
+
+确定节点是否具有特定谓词。
+
+查询示例：前五名导演并且他所有录制有发行日期的电影。 导演们执导了至少一部电影-gt（count（director.film），0）的等效语义。
+```
+{
+  me(func: has(director.film), first: 5) {
+    name@en
+    director.film @filter(has(initial_release_date))  {
+      initial_release_date
+      name@en
+    }
+  }
+}
+```
+结果
+```
+{
+  "data": {
+    "me": [
+      {
+        "name@en": "Zehra Yiğit"
+      },
+      {
+        "name@en": "Charlton Heston",
+        "director.film": [
+          {
+            "initial_release_date": "1982-09-23T00:00:00Z",
+            "name@en": "Mother Lode"
+          },
+          {
+            "initial_release_date": "1972-03-02T00:00:00Z",
+            "name@en": "Antony and Cleopatra"
+          },
+          {
+            "initial_release_date": "1988-12-21T00:00:00Z",
+            "name@en": "A Man for All Seasons"
+          }
+        ]
+      },
+      {
+        "name@en": "Rajeev Sharma",
+        "director.film": [
+          {
+            "initial_release_date": "2012-01-01T00:00:00Z",
+            "name@en": "Nabar"
+          },
+          {
+            "initial_release_date": "2014-05-30T00:00:00Z",
+            "name@en": "47 to 84"
+          }
+        ]
+      },
+      {
+        "name@en": "Gabriel Nussbaum",
+        "director.film": [
+          {
+            "initial_release_date": "2011-01-01T00:00:00Z",
+            "name@en": "How It Ended"
+          },
+          {
+            "initial_release_date": "2007-01-01T00:00:00Z",
+            "name@en": "Wade in the Water, Children"
+          }
+        ]
+      },
+      {
+        "name@en": "James Wharton O'Keefe",
+        "director.film": [
+          {
+            "initial_release_date": "2013-01-01T00:00:00Z",
+            "name@en": "Go Public: A Day in the Life of an American School District"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+## Geolocation
+
+`提示 当前我们只支持Point, Polygon与MultiPolygon这几种几何类型的索引。但是，Dgraph可以存储其它类型的地理信息数据`
+请注意，对于地理查询，所有带有孔的多边形都将替换为外部环状查询，会忽略孔。 此外，至版本0.7.7，多边形包含检查都是近似的。
+
+## Mutations 突变
+要使用geo函数，您需要在谓词上建立索引。
+`loc: geo @index(geo) .`
+这是添加点的方法。
+```
+{
+  set {
+    <_:0xeb1dde9c> <loc> "{'type':'Point','coordinates':[-122.4220186,37.772318]}"^^<geo:geojson> .
+    <_:0xeb1dde9c> <name> "Hamon Tower" .
+    <_:0xeb1dde9c> <dgraph.type> "Location" .
+  }
+}
+```
+下面将多边形与节点关联的方法。 添加MultiPolygon也是类似的。
+```
+{
+  set {
+    <_:0xf76c276b> <loc> "{'type':'Polygon','coordinates':[[[-122.409869,37.7785442],[-122.4097444,37.7786443],[-122.4097544,37.7786521],[-122.4096334,37.7787494],[-122.4096233,37.7787416],[-122.4094004,37.7789207],[-122.4095818,37.7790617],[-122.4097883,37.7792189],[-122.4102599,37.7788413],[-122.409869,37.7785442]],[[-122.4097357,37.7787848],[-122.4098499,37.778693],[-122.4099025,37.7787339],[-122.4097882,37.7788257],[-122.4097357,37.7787848]]]}"^^<geo:geojson> .
+    <_:0xf76c276b> <name> "Best Western Americana Hotel" .
+    <_:0xf76c276b> <dgraph.type> "Location" .
+  }
+}
+
+```
+以上示例摘自我们的SF Tourism数据集。
+## Query
+### near
+语法示例：near(predicate, [long, lat], distance)
+
+模式类型：geo
+
+所需索引：geo
+
+匹配所有由谓词给出的位置在geojson坐标[long，lat]的多少米距内的实体。
+
+查询示例：距旧金山金门公园1000米（1公里）内的旅游地。
+```
+{
+  tourist(func: near(loc, [-122.469829, 37.771935], 1000) ) {
+    name
+  }
+}
+```
+结果
+```
+{
+  "data": {
+    "tourist": [
+      {
+        "name": "Peace Lantern"
+      },
+      {
+        "name": "De Young Museum"
+      },
+      {
+        "name": "Conservatory of Flowers"
+      }
+    ]
+  }
+}
+```
+### within
+语法示例：within(predicate, [[[long1, lat1], ..., [longN, latN]]]
+
+模式类型：geo
+
+所需索引：geo
+
+匹配通过由geojson坐标数组指定的多边形来限定位置内的所有实体。
+
+查询示例：旧金山金门公园指定区域内的旅游目的地。
+```
+{
+  tourist(func: within(loc, [[[-122.47266769409178, 37.769018558337926 ], [ -122.47266769409178, 37.773699921075135 ], [ -122.4651575088501, 37.773699921075135 ], [ -122.4651575088501, 37.769018558337926 ], [ -122.47266769409178, 37.769018558337926]]] )) {
+    name
+  }
+}
+```
+结果
+```
+{
+  "data": {
+    "tourist": [
+      {
+        "name": "Peace Lantern"
+      },
+      {
+        "name": "De Young Museum"
+      },
+      {
+        "name": "Buddha"
+      }
+    ]
+  }
+}
+```
+contains
+语法示例：contains(predicate, [long, lat]) 或 contains(predicate, [[long1, lat1], ..., [longN, latN]])
+
+模式类型：geo
+
+所需索引：geo
+
+匹配所有通过geojson坐标[long，lat]或给定geojson多边形限定的范围内包含的实体。
+
+查询示例：在旧金山动物园的火烈鸟围栏中包含的所有实体点。
+```
+{
+  tourist(func: contains(loc, [ -122.50326097011566, 37.73353615592843 ] )) {
+    name
+  }
+}
+```
+结果
+```
+{
+  "data": {
+    "tourist": [
+      {
+        "name": "San Francisco Zoo"
+      },
+      {
+        "name": "Flamingo"
+      }
+    ]
+  }
+}
+```
+
+### intersects
+语法示例：intersects(predicate, [[[long1, lat1], ..., [longN, latN]]])
+模式类型：geo
+
+所需索引：geo
+检索所有与谓词限定的多边形相交的地点
+```
+{
+  tourist(func: intersects(loc, [[[-122.503325343132, 37.73345766902749 ], [ -122.503325343132, 37.733903134117966 ], [ -122.50271648168564, 37.733903134117966 ], [ -122.50271648168564, 37.73345766902749 ], [ -122.503325343132, 37.73345766902749]]] )) {
+    name
+  }
+}`
+```
+结果
+```
+{
+  "data": {
+    "tourist": [
+      {
+        "name": "San Francisco Zoo"
+      },
+      {
+        "name": "Flamingo"
+      }
+    ]
+  }
+}
+```
