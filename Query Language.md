@@ -2803,163 +2803,493 @@ Facet 构面值可以存储在值变量中(就是键值对)。
 
 对于AG替换为
 
-min：在值变量varName中选择最小值
-max：选择最大值
-sum：将值变量varName中的所有值相加
-avg：计算varName中值的平均值
+ - min：在值变量varName中选择最小值
+ - max：选择最大值
+ - sum：将值变量varName中的所有值相加
+ - avg：计算varName中值的平均值
+
 模式类型：
 
-聚合架构类型
-最小/最大整数，浮点数，字符串，日期时间，默认值
-sum / avg int，浮点数
-汇总只能应用于值变量。不需要索引（已经找到值并将其存储在值变量映射中）。
+|聚合|架构类型|
+|--|--|
+|min / max|int, float, string, dateTime, default|
+|sum / avg |int, float|
 
-将聚合应用于包含变量定义的查询块。与全局的查询变量和值变量相反，聚合是在本地计算的。例如：
+汇总只能应用于值变量。不需要索引（值已经找到并将其存储在值变量映射中了）。
 
-以谓词A {
+聚合应该应用于包含变量定义的查询块。与全局的查询变量和值变量相反，聚合是在本地计算的。
+例如：
+
+```
+A as predicateA {
   ...
-  B作为谓词B {
-    x作为...一些价值...
+  B as predicateB {
+    x as ...some value...
   }
-  最小（val（x））
+  min(val(x))
 }
-复制
-此处，A和B是与这些块匹配的所有UID的列表。值变量x是从B中的UID到值的映射。但是，针对A中的每个UID计算聚合min（val（x））。即，其语义为：对于A中的每个UID，取与A的传出谓词B边相对应的x的切片并计算这些值的汇总。
+```
+
+此处，A和B是与这些块匹配的所有UID的列表。值变量x是从B中的UID到值的映射。但是，针对A中的每个UID计算聚合min（val（x））。即，其语义为：对于A中的每个UID，取与A的谓词边B相对应的x并计算这些值的汇总最小。
 
 可以将聚合本身分配给值变量，从而将UID映射到聚合映射。
 
-敏
-根使用
-查询示例：获取任何哈利波特电影的最小初始发行日期。
+### min
+根用法 
+查询示例：获取哈利波特电影的最小初始发行日期。
 
-将发布日期分配给变量，然后将其汇总并在一个空块中获取。
+将发布日期分配给变量，然后将其汇总后在一个空块中获取。
 
-查询Go Java Python JavaScript（gRPC）JavaScript（HTTP）卷曲
-跑
+查询
+```
 {
-  var（func：allofterms（name @ en，“ Harry Potter”））{
-    d作为initial_release_date
+  var(func: allofterms(name@en, "Harry Potter")) {
+    d as initial_release_date
   }
-  我（） {
-    min（val（d））
+  me() {
+    min(val(d))
   }
 }
- 编辑查询复制
+```
 响应
- 复制
-其他级别的用法
-查询示例：导演呼叫了史蒂文（Steven），并按照首部电影的升序排列了首部电影的发行日期。
-
-查询Go Java Python JavaScript（gRPC）JavaScript（HTTP）卷曲
-跑
+```
 {
-  史蒂文斯（var）（func：allofterms（name @ en，“ steven”））{
-    电影导演
-      作为initial_release_date的ird
-      ＃ird是一个值变量，将电影UID映射到其发行日期
+  "data": {
+    "me": [
+      {
+        "min(val(d))": "2001-11-04T00:00:00Z"
+      }
+    ]
+  }
+}
+```
+#### 其他级别的用法
+
+查询示例：所有名字是史蒂文（Steven）的导演的首部电影，按升序排序的发行日期。
+
+查询
+```
+{
+  stevens as var(func: allofterms(name@en, "steven")) {
+    director.film {
+      ird as initial_release_date
+      # ird is a value variable mapping a film UID to its release date
     }
-    minIRD为min（val（ird））
-    ＃minIRD是一个将导演UID映射到其首次发布日期的值变量
+    minIRD as min(val(ird))
+    # minIRD is a value variable mapping a director UID to their first release date
   }
 
-  byIRD（func：uid（stevens），orderasc：val（minIRD））{
-    名字@en
-    firstRelease：val（minIRD）
+  byIRD(func: uid(stevens), orderasc: val(minIRD)) {
+    name@en
+    firstRelease: val(minIRD)
   }
 }
- 编辑查询复制
+```
 响应
- 复制
-最高
-根使用
-查询示例：获取任何哈利波特电影的最大初始发行日期。
+```
+{
+  "data": {
+    "byIRD": [
+      {
+        "name@en": "Steven McMillan",
+        "firstRelease": "0214-02-28T00:00:00Z"
+      },
+      {
+        "name@en": "J. Steven Edwards",
+        "firstRelease": "1929-01-01T00:00:00Z"
+      },
+      {
+        "name@en": "Steven Spielberg",
+        "firstRelease": "1964-03-24T00:00:00Z"
+      },
+      {
+        "name@en": "Steven Jacobson",
+        "firstRelease": "1966-01-01T00:00:00Z"
+      },
+      {
+        "name@en": "Steven Arnold",
+        "firstRelease": "1968-01-01T00:00:00Z"
+      }
+    ]
+  }
+}
+```
+### Max最高
+根级使用
+查询示例：获取哈利波特电影的最大初始发行日期。
 
 将发布日期分配给变量，然后将其汇总并在一个空块中获取。
 
-查询Go Java Python JavaScript（gRPC）JavaScript（HTTP）卷曲
-跑
+查询
+```
 {
-  var（func：allofterms（name @ en，“ Harry Potter”））{
-    d作为initial_release_date
+  var(func: allofterms(name@en, "Harry Potter")) {
+    d as initial_release_date
   }
-  我（） {
-    最大（val（d））
+  me() {
+    max(val(d))
   }
 }
- 编辑查询复制
+```
 响应
- 复制
+```
+{
+  "data": {
+    "me": [
+      {
+        "max(val(d))": "2011-07-27T00:00:00Z"
+      }
+    ]
+  }
+}
+```
 其他级别的用法
 查询示例：昆汀·塔伦蒂诺（Quentin Tarantino）的电影以及最新电影的发行日期。
 
-查询Go Java Python JavaScript（gRPC）JavaScript（HTTP）卷曲
-跑
+查询
+```
 {
-  导演（func：allofterms（name @ en，“昆汀·塔伦蒂诺”））{
-    电影导演
-      名字@en
-      x作为initial_release_date
+  director(func: allofterms(name@en, "Quentin Tarantino")) {
+    director.film {
+      name@en
+      x as initial_release_date
     }
-    最大（val（x））
+    max(val(x))
   }
 }
- 编辑查询复制
+```
 响应
- 复制
-总和平均
-根使用
-查询示例：获取以史蒂文或汤姆为名的人执导的电影总数的总和。
-
-查询Go Java Python JavaScript（gRPC）JavaScript（HTTP）卷曲
-跑
+```
 {
-  var（func：anyofterms（name @ en，“史蒂芬·汤姆”））{
-    作为计数（director.film）
-  }
-
-  我（） {
-    avg（val（a））
-    总和（val（a））
-  }
-}
- 编辑查询复制
-响应
- 复制
-其他级别的用法
-查询示例：史蒂芬·斯皮尔伯格（Steven Spielberg）的电影，以及每部电影的录制流派数以及每部电影的流派总数和平均流派。
-
-查询Go Java Python JavaScript（gRPC）JavaScript（HTTP）卷曲
-跑
-{
-  导演（func：eq（name @ en，“史蒂芬·斯皮尔伯格”）
-    名字@en
-    电影导演
-      名字@en
-      numGenres：g作为count（类型）
-    }
-    totalGenres：sum（val（g））
-    genresPerMovie：avg（val（g））
-  }
-}
- 编辑查询复制
-响应
- 复制
-汇总汇总
-可以将汇总分配给值变量，因此可以依次汇总这些变量。
-
-查询示例：对于彼得·杰克逊（Peter Jackson）电影中的每个演员，请查找任何电影中扮演的角色数量。将这些内容相加即可得出电影中所有演员曾经扮演的角色总数。然后总结一下，找出彼得·杰克逊电影中曾出现过的演员所扮演的角色总数。请注意，这演示了如何聚合聚合；不过，这种情况下的答案并不十分准确，因为在多部彼得·杰克逊（Peter Jackson）电影中出演的演员都被计算了一次以上。
-
-查询Go Java Python JavaScript（gRPC）JavaScript（HTTP）卷曲
-跑
-{
-  PJ as var（func：allofterms（name @ en，“ Peter Jackson”））{
-    电影导演
-      主演{＃主演演员
-        表演演员{
-          电影作为计数（actor.film）
-          ＃这个演员的角色数量
-        }
-        perf_total为sum（val（movies））
+  "data": {
+    "director": [
+      {
+        "director.film": [
+          {
+            "name@en": "Kill Bill Volume 1",
+            "initial_release_date": "2003-10-10T00:00:00Z"
+          },
+          {
+            "name@en": "Django Unchained",
+            "initial_release_date": "2012-12-25T00:00:00Z"
+          },
+          {
+            "name@en": "Sin City",
+            "initial_release_date": "2005-03-28T00:00:00Z"
+          }
+        ]
       }
-      movie_total作为sum（val（perf_total））
-      ＃个总角色
+    ]
+  }
+}
+```
+### Sum与Avg 求和和平均
+根级使用
+查询示例：获取名字中有史蒂文与汤姆的人执导的电影总数的总和与平均值。
+
+查询
+```
+{
+  var(func: anyofterms(name@en, "Steven Tom")) {
+    a as count(director.film)
+  }
+
+  me() {
+    avg(val(a))
+    sum(val(a))
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "me": [
+      {
+        "avg(val(a))": 0.224982
+      },
+      {
+        "sum(val(a))": 1558
+      }
+    ]
+  }
+}
+```
+其他级别的用法
+查询示例：史蒂芬·斯皮尔伯格（Steven Spielberg）的电影，以及每部电影的流派数以及每部电影的流派总数和平均流派数。
+
+查询
+```
+{
+  director(func: eq(name@en, "Steven Spielberg")) {
+    name@en
+    director.film {
+      name@en
+      numGenres : g as count(genre)
+    }
+    totalGenres : sum(val(g))
+    genresPerMovie : avg(val(g))
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "director": [
+      {
+        "name@en": "Steven Spielberg",
+        "director.film": [
+          {
+            "name@en": "Hook",
+            "numGenres": 8
+          },
+          {
+            "name@en": "The Color Purple",
+            "numGenres": 1
+          },
+          {
+            "name@en": "Schindler's List",
+            "numGenres": 5
+          },
+          {
+            "name@en": "Amistad",
+            "numGenres": 3
+          },
+          {
+            "name@en": "Indiana Jones and the Temple of Doom",
+            "numGenres": 4
+          },
+          {
+            "name@en": "Duel",
+            "numGenres": 4
+          },
+          {
+            "name@en": "Lincoln",
+            "numGenres": 5
+          },
+          {
+            "name@en": "Jurassic Park",
+            "numGenres": 3
+          },
+          {
+            "name@en": "Indiana Jones and the Raiders of the Lost Ark",
+            "numGenres": 2
+          },
+          {
+            "name@en": "War Horse",
+            "numGenres": 2
+          },
+          {
+            "name@en": "Close Encounters of the Third Kind",
+            "numGenres": 3
+          },
+          {
+            "name@en": "War of the Worlds",
+            "numGenres": 9
+          },
+          {
+            "name@en": "1941",
+            "numGenres": 5
+          },
+          {
+            "name@en": "Minority Report",
+            "numGenres": 12
+          },
+          {
+            "name@en": "Twilight Zone: The Movie",
+            "numGenres": 3
+          },
+          {
+            "name@en": "Saving Private Ryan",
+            "numGenres": 3
+          },
+          {
+            "name@en": "Jaws",
+            "numGenres": 8
+          },
+          {
+            "name@en": "Empire of the Sun",
+            "numGenres": 7
+          },
+          {
+            "name@en": "Indiana Jones and the Kingdom of the Crystal Skull",
+            "numGenres": 7
+          },
+          {
+            "name@en": "The Lost World: Jurassic Park",
+            "numGenres": 5
+          },
+          {
+            "name@en": "The Adventures of Tintin: The Secret of the Unicorn",
+            "numGenres": 6
+          },
+          {
+            "name@en": "Indiana Jones and the Last Crusade",
+            "numGenres": 4
+          },
+          {
+            "name@en": "Catch Me If You Can",
+            "numGenres": 4
+          },
+          {
+            "name@en": "The Terminal",
+            "numGenres": 5
+          },
+          {
+            "name@en": "Munich",
+            "numGenres": 5
+          },
+          {
+            "name@en": "Slipstream",
+            "numGenres": 1
+          },
+          {
+            "name@en": "E.T. the Extra-Terrestrial",
+            "numGenres": 5
+          },
+          {
+            "name@en": "Bridge of Spies",
+            "numGenres": 1
+          },
+          {
+            "name@en": "A.I. Artificial Intelligence",
+            "numGenres": 4
+          },
+          {
+            "name@en": "The Sugarland Express",
+            "numGenres": 3
+          },
+          {
+            "name@en": "The BFG",
+            "numGenres": 0
+          },
+          {
+            "name@en": "Amblin",
+            "numGenres": 1
+          },
+          {
+            "name@en": "Something Evil",
+            "numGenres": 3
+          },
+          {
+            "name@en": "Robopocalypse",
+            "numGenres": 3
+          },
+          {
+            "name@en": "Always",
+            "numGenres": 4
+          },
+          {
+            "name@en": "Savage",
+            "numGenres": 2
+          },
+          {
+            "name@en": "The Attack of the Mummies",
+            "numGenres": 0
+          },
+          {
+            "name@en": "Firelight",
+            "numGenres": 2
+          },
+          {
+            "name@en": "Amazing Stories: Book One",
+            "numGenres": 2
+          }
+        ],
+        "totalGenres": 154,
+        "genresPerMovie": 3.948718
+      },
+      {
+        "name@en": "Steven Spielberg"
+      },
+      {
+        "name@en": "Steven Spielberg"
+      },
+      {
+        "name@en": "Steven Spielberg"
+      }
+    ]
+  }
+}
+```
+### 聚合的聚合
+可以将聚合分配给值变量，因此可以依次进行这些变量的聚合计算。
+
+查询示例：对于彼得·杰克逊（Peter Jackson）电影中的每个演员，请查在每一部电影中扮演的角色数量。将这些内容相加即可得出电影中所有演员曾经扮演的角色总数。然后总结一下，找出彼得·杰克逊电影中曾出现过的演员所扮演的角色总数。请注意，这演示了如何聚合聚合；不过，这种情况下的答案并不十分准确，因为在多部彼得·杰克逊（Peter Jackson）电影中出演的演员都被计算了一次以上。
+
+查询
+```
+{
+  PJ as var(func:allofterms(name@en, "Peter Jackson")) {
+    director.film {
+      starring {  # starring an actor
+        performance.actor {
+          movies as count(actor.film)
+          # number of roles for this actor
+        }
+        perf_total as sum(val(movies))
+      }
+      movie_total as sum(val(perf_total))
+      # total roles for all actors in this movie
+    }
+    gt as sum(val(movie_total))
+  }
+
+  PJmovies(func: uid(PJ)) {
+    name@en
+    director.film (orderdesc: val(movie_total), first: 5) {
+      name@en
+      totalRoles : val(movie_total)
+    }
+    grandTotal : val(gt)
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "PJmovies": [
+      {
+        "name@en": "Peter Jackson",
+        "director.film": [
+          {
+            "name@en": "The Lord of the Rings: The Two Towers",
+            "totalRoles": 1565
+          },
+          {
+            "name@en": "The Lord of the Rings: The Return of the King",
+            "totalRoles": 1518
+          },
+          {
+            "name@en": "The Lord of the Rings: The Fellowship of the Ring",
+            "totalRoles": 1335
+          },
+          {
+            "name@en": "The Hobbit: An Unexpected Journey",
+            "totalRoles": 1274
+          },
+          {
+            "name@en": "The Hobbit: The Desolation of Smaug",
+            "totalRoles": 1261
+          }
+        ],
+        "grandTotal": 10592
+      },
+      {
+        "name@en": "Peter Jackson"
+      },
+      {
+        "name@en": "Peter Jackson"
+      },
+      {
+        "name@en": "Peter Jackson"
+      },
+      {
+        "name@en": "Sam Peter Jackson"
+      }
+    ]
+  }
+}
+```
