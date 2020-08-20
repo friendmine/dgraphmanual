@@ -3293,3 +3293,153 @@ A as predicateA {
   }
 }
 ```
+数值变量数学
+值变量可以使用数学函数进行组合。例如，这可用于关联得分，然后将其用于排序或执行其他操作，例如可能用于构建新闻提要，简单的推荐系统等。
+
+数学语句必须包含在math( <exp> )这一表达式中，并且必须存储到值变量中。
+
+支持的运算符如下：
+
+|运算符|接受的类型|功能|
+|--|--|--|
+|+ - * / %|int，float|执行相应的运算|
+|min max|除了geo，bool（二进制函数）以外的所有类型| 在这两种类型中选择min / max值|
+|< > <= >= == !=|除geo，bool以外的所有类型|根据值返回true或false|
+|floor ceil ln exp sqrt|int, float (unary function)|执行相应的计算|
+|since|dateTime|返回从指定时间开始的浮动类型秒数|
+|pow(a, b)|int, float|返回a的b次方|
+|logbase(a,b)|int，float|返回以b为底的a的对数|
+|cond(a, b, c)|第一个操作数必须是布尔值|如果a为true，则选择b否则为c|
+
+查询示例：史蒂芬·斯皮尔伯格的每部电影评分，既计算包括演员人数，类型和国家/地区的总和。按降序排列列出前五部此类电影。
+
+查询
+```
+{
+	var(func:allofterms(name@en, "steven spielberg")) {
+		films as director.film {
+			p as count(starring)
+			q as count(genre)
+			r as count(country)
+			score as math(p + q + r)
+		}
+	}
+
+	TopMovies(func: uid(films), orderdesc: val(score), first: 5){
+		name@en
+		val(score)
+	}
+}
+```
+响应
+```
+{
+  "data": {
+    "TopMovies": [
+      {
+        "name@en": "Lincoln",
+        "val(score)": 179
+      },
+      {
+        "name@en": "Minority Report",
+        "val(score)": 156
+      },
+      {
+        "name@en": "Schindler's List",
+        "val(score)": 145
+      },
+      {
+        "name@en": "The Terminal",
+        "val(score)": 118
+      },
+      {
+        "name@en": "Saving Private Ryan",
+        "val(score)": 99
+      }
+    ]
+  }
+}
+```
+值变量及其聚合结果可在过滤器中使用。
+
+查询示例：计算每部史蒂文·斯皮尔伯格电影的得分，条件为发行日期为条件，以对超过10年的电影进行惩罚性过滤，并根据结果得分进行过滤。
+
+查询
+```
+{
+  var(func:allofterms(name@en, "steven spielberg")) {
+    films as director.film {
+      p as count(starring)
+      q as count(genre)
+      date as initial_release_date
+      years as math(since(date)/(365*24*60*60))
+      score as math(cond(years > 10, 0, ln(p)+q-ln(years)))
+    }
+  }
+
+  TopMovies(func: uid(films), orderdesc: val(score)) @filter(gt(val(score), 2)){
+    name@en
+    val(score)
+    val(date)
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "TopMovies": [
+      {
+        "name@en": "Lincoln",
+        "val(score)": 8.089933,
+        "val(date)": "2012-10-08T00:00:00Z"
+      },
+      {
+        "name@en": "The Adventures of Tintin: The Secret of the Unicorn",
+        "val(score)": 6.529441,
+        "val(date)": "2011-10-23T00:00:00Z"
+      },
+      {
+        "name@en": "War Horse",
+        "val(score)": 4.024157,
+        "val(date)": "2011-12-04T00:00:00Z"
+      }
+    ]
+  }
+}
+```
+通过数学运算计算出的值将存储到值变量中，因此可以对它们进行汇总。
+
+查询示例：计算史蒂文·斯皮尔伯格（Steven Spielberg）的每部电影的得分，然后合计得分。
+查询
+```
+{
+	steven as var(func:eq(name@en, "Steven Spielberg")) @filter(has(director.film)) {
+		director.film {
+			p as count(starring)
+			q as count(genre)
+			r as count(country)
+			score as math(p + q + r)
+		}
+		directorScore as sum(val(score))
+	}
+
+	score(func: uid(steven)){
+		name@en
+		val(directorScore)
+	}
+}
+```
+响应
+```
+{
+  "data": {
+    "score": [
+      {
+        "name@en": "Steven Spielberg",
+        "val(directorScore)": 1865
+      }
+    ]
+  }
+}
+```
