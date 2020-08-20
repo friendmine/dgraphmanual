@@ -3443,3 +3443,260 @@ A as predicateA {
   }
 }
 ```
+
+### 分组
+语法示例：
+
+ - q(func: ...) @groupby(predicate) { min(...) }
+ - predicate @groupby(pred) { count(uid) }
+
+分组查询根据给定的一组属性（对元素进行分组）汇总查询结果。例如，一个包含块friend @groupby(age) { count(uid) }的查询，查找沿朋友边可达的所有节点，并根据年龄将其划分为组，然后计算每个组中有多少个节点。返回的结果是分组的边和聚合。
+
+在groupby块内，仅允许聚合，并且计数count只能应用于uid。
+
+如果将groupby应用于uid谓词，则可以将结果聚合保存在变量中（将分组的UID映射为聚合值），并在查询中的其他位置使用以提取除分组或聚合的边以外的信息。
+
+查询示例：对于史蒂文·斯皮尔伯格（Steven Spielberg）的电影，计算每种类型的电影数量，对于每种类型，返回类型名称和计数。无法在分组依据中提取名称，因为它不是集合，但是uid(a)可用于从UID提取UID到值映射表，从而按类型UID来组织byGenre查询。
+
+查询
+```
+{
+  var(func:allofterms(name@en, "steven spielberg")) {
+    director.film @groupby(genre) {
+      a as count(uid)
+      # a is a genre UID to count value variable
+    }
+  }
+
+  byGenre(func: uid(a), orderdesc: val(a)) {
+    name@en
+    total_movies : val(a)
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "byGenre": [
+      {
+        "name@en": "Drama",
+        "total_movies": 21
+      },
+      {
+        "name@en": "Adventure Film",
+        "total_movies": 14
+      },
+      {
+        "name@en": "Thriller",
+        "total_movies": 13
+      },
+      {
+        "name@en": "Dystopia",
+        "total_movies": 1
+      }
+    ]
+  }
+}
+```
+查询示例：蒂姆·伯顿电影中的演员，以及他们在蒂姆·伯顿电影中扮演过多少角色。
+查询
+```
+{
+  var(func:allofterms(name@en, "Tim Burton")) {
+    director.film {
+      starring @groupby(performance.actor) {
+        a as count(uid)
+        # a is an actor UID to count value variable
+      }
+    }
+  }
+
+  byActor(func: uid(a), orderdesc: val(a)) {
+    name@en
+    val(a)
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "byActor": [
+      {
+        "name@en": "Johnny Depp",
+        "val(a)": 8
+      },
+      {
+        "name@en": "Helena Bonham Carter",
+        "val(a)": 7
+      },
+      {
+        "name@en": "Christopher Lee",
+        "val(a)": 6
+      }
+    ]
+  }
+}
+```
+
+### Expand Predicates 扩展谓词
+expand()函数可用于将谓词扩展到节点之外。要使用expand()，类型系统是必需的。请参阅类型系统部分type system以确认如何设置类型节点。本节的其余部分假定您熟悉该部分。
+
+有两种使用扩展功能的方法。
+
+ - 可以将类型传递给expand()来扩展类型中的所有谓词。
+查询示例：列出“哈利波特”系列电影：
+
+查询
+```
+{
+  all(func: eq(name@en, "Harry Potter")) @filter(type(Series)) {
+    name@en
+    expand(Series) {
+      name@en
+      expand(Film)
+    }
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "all": [
+      {
+        "name@en": [
+          "Harry Potter",
+          "Harry Potter"
+        ],
+        "name@fi": "Harry Potter (elokuvasarja)",
+        "name@hu": "Harry Potter filmsorozat",
+        "name@sl": "Filmska serija Harry Potter",
+        "name@da": "Harry Potter-filmserien",
+        "name@ca": "Saga de Harry Potter",
+        "name@ko": "해리 포터",
+        "name@pt": "Harry Potter",
+        "name@ms": "Harry Potter",
+        "name@th": "ภาพยนตร์ชุดแฮร์รี่ พอตเตอร์",
+        "name@cs": "Filmová sága o Harry Potterovi",
+        "name@tr": "Harry Potter Film Serisi",
+        "name@hr": "Filmski serijal o Harry Potteru",
+        "name@es": "Harry Potter",
+        "name@sk": "Harry Potter (filmová séria)",
+        "name@hi": "हैरी पॉटर",
+        "name@nl": "Harry Potter",
+        "name@it": "Harry Potter",
+        "name@fa": "هری پاتر",
+        "name@vi": "Harry Potter",
+        "name@ru": "Гарри Поттер (серия фильмов)",
+        "name@fr": "Harry Potter",
+        "name@ja": "ハリー・ポッターシリーズ",
+        "name@ro": "Harry Potter",
+        "name@uk": "Фільми про Гаррі Поттера",
+        "name@id": "Harry Potter (film)",
+        "name@iw": "הארי פוטר",
+        "name@lt": "„Hario Poterio\" filmų serija",
+        "name@zh-Hant": "哈利波特系列電影",
+        "name@sr": "Серијал филмова о Харију Потеру",
+        "name@el": "Σειρά ταινιών Χάρι Πότερ",
+        "name@sv": "Harry Potter",
+        "name@pl": "Harry Potter",
+        "name@ar": "سلسلة أفلام هاري بوتر",
+        "name@bg": "Хари Потър",
+        "name@et": "Harry Potter",
+        "name@lv": "Harijs Poters",
+        "name@de": "Harry-Potter-Filmreihe",
+        "series.films_in_series": [
+          {
+            "name@en": "Harry Potter and the Chamber of Secrets",
+            "metacritic_id": "harrypotterandthechamberofsecrets",
+            "name@fi": "Harry Potter ja salaisuuksien kammio",
+            "name@zh": "哈利·波特与密室",
+            "name@pt-BR": "Harry Potter e a Câmara Secreta",
+            "name@hu": "Harry Potter és a Titkok Kamrája",
+            "name@sl": "Harry Potter in dvorana skrivnosti",
+            "name@pt-PT": "Harry Potter e a Câmara dos Segredos",
+            "name@da": "Harry Potter og Hemmelighedernes Kammer",
+            "name@ca": "Harry Potter i la cambra secreta",
+            "name@ko": "해리포터와 비밀의 방",
+            "name@pt": "Harry Potter e a Câmara Secreta",
+            "name@no": "Harry Potter og mysteriekammeret",
+            "name@ms": "Harry Potter and the Chamber of Secrets",
+            "name@th": "แฮร์รี่ พอตเตอร์กับห้องแห่งความลับ",
+            "name@cs": "Harry Potter a Tajemná komnata",
+            "name@tr": "Harry Potter ve Sırlar Odası",
+            "name@hr": "Harry Potter i Odaja tajni",
+            "name@eo": "Hari Poter kaj la Ĉambro de Sekretoj (filmo)",
+            "name@es": "Harry Potter y la cámara secreta",
+            "name@sk": "Harry Potter a Tajomná komnata",
+            "name@hi": "हैरी पॉटर और रहस्यमयी तहख़ाना",
+            "name@nl": "Harry Potter en de Geheime Kamer",
+            "name@it": "Harry Potter e la camera dei segreti",
+            "name@fa": "هری پاتر و تالار اسرار",
+            "name@vi": "Harry Potter và Phòng chứa Bí mật",
+            "name@ru": "Гарри Поттер и тайная комната",
+            "name@fr": "Harry Potter et la Chambre des secrets",
+            "name@ja": "ハリー・ポッターと秘密の部屋",
+            "name@ro": "Harry Potter și Camera Secretelor",
+            "name@uk": "Гаррі Поттер і таємна кімната",
+            "name@id": "Harry Potter and the Chamber of Secrets",
+            "name@iw": "הארי פוטר וחדר הסודות",
+            "name@lt": "Haris Poteris ir Paslapčių kambarys",
+            "name@zh-Hant": "哈利波特─消失的密室",
+            "name@sr": "Хари Потер и Дворана тајни",
+            "name@el": "Ο Χάρι Πότερ και η Κάμαρα με τα Μυστικά",
+            "name@sv": "Harry Potter och Hemligheternas kammare",
+            "name@pl": "Harry Potter i Komnata Tajemnic",
+            "name@ar": "هاري بوتر وحجرة الأسرار",
+            "name@bg": "Хари Потър и Стаята на тайните",
+            "name@et": "Harry Potter ja saladuste kamber",
+            "name@lv": "Harijs Poters un Noslēpumu kambaris",
+            "name@de": "Harry Potter und die Kammer des Schreckens",
+            "traileraddict_id": "harry-potter-and-the-chamber-of-secrets",
+            "initial_release_date": "2002-11-03T00:00:00Z",
+            "rottentomatoes_id": "harry_potter_and_the_chamber_of_secrets",
+            "tagline@en": "Hogwarts is back in session.",
+            "netflix_id": "60024925"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+ - 如果_all_作为参数传递给expand()，则要扩展的谓词将是分配给给定节点的类型中的字段的并集。
+_all_关键字要求节点具有类型。 Dgraph将查找已分配给节点的所有类型，查询这些类型以检查它们具有哪些属性，然后使用这些属性来计算要扩展的谓词列表。
+
+例如，考虑具有动物和宠物类型的节点，它们具有以下定义：
+```
+type Animal {
+    name
+    species
+    dob
+}
+
+type Pet {
+    owner
+    veterinarian
+}
+
+```
+在此节点上调用expand(_all_) 时，Dgraph将首先检查该节点具有的类型（Animal和Pet）。然后它将获得Animal和Pet的定义，并根据它们的类型定义构建谓词列表。
+```
+name
+species
+dob
+owner
+veterinarian
+```
+```
+注意对于字符串谓词，expand仅返回未用语言标记的值（请参阅语言首选项）。因此，通常需要添加name@fr或name@. 到扩展查询。
+```
+
+### 展开时过滤
+
+扩展查询支持对传出边的类型的过滤。例如，expand(_all_) @filter(type(Person)) 将在所有谓词上扩展，但仅包括目标节点为Person类型的边。由于只有uid类型的节点可以具有类型，因此该查询将过滤掉所有标量值。
+
+请注意，扩展功能当前不支持其他类型的过滤器和指令。过滤器需要对允许使用的过滤器使用类型函数。允许逻辑AND和OR运算。例如，expand(_all_) @filter(type(Person) OR type(Animal)) ，将仅扩展指向任一类型节点的边。
+
