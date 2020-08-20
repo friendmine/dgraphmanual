@@ -1480,3 +1480,1486 @@ contains
   }
 }
 ```
+### 连接过滤器
+在@filter中，可以将多个过滤函数与布尔连接符一起使用。
+
+AND，OR和NOT
+连接词AND，OR和NOT不仅可以加入过滤器，并且可以内置到任意复杂的过滤器中，例如（NOT A OR B）AND（C AND NOT（D OR E））。 
+请注意，NOT比AND优先级更高，而AND比OR优先级更高。
+
+查询示例：所有同时包含“印第安纳”和“琼斯”或“侏罗纪”和“公园”的史蒂芬·斯皮尔伯格的电影。
+```
+{
+  me(func: eq(name@en, "Steven Spielberg")) @filter(has(director.film)) {
+    name@en
+    director.film @filter(allofterms(name@en, "jones indiana") OR allofterms(name@en, "jurassic park"))  {
+      uid
+      name@en
+    }
+  }
+}
+```
+结果
+```
+{
+  "data": {
+    "me": [
+      {
+        "name@en": "Steven Spielberg",
+        "director.film": [
+          {
+            "uid": "0x9a41",
+            "name@en": "Indiana Jones and the Temple of Doom"
+          },
+          {
+            "uid": "0x1cde3",
+            "name@en": "Jurassic Park"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+### alias别名
+语法示例：
+
+aliasName : predicate
+aliasName : predicate { ... }
+aliasName : varName as ...
+aliasName : count(predicate)
+aliasName : max(val(varName))
+别名是在结果中提供备用名称。 谓词，变量和集合可以通过在别名之前加上别名来命名。 别名不必与原始谓词名称不同，但是，在一个块内，别名必须与谓词名称和同一块中返回的其他别名不同。 别名可用于在一个块中多次返回同一谓词。
+
+查询示例：具有名称匹配到“Steven”的导演，他的UID，英文名称，每部电影的演员平均人数，电影总数以及每部电影的英语和法语名称。
+```
+{
+  ID as var(func: allofterms(name@en, "Steven")) @filter(has(director.film)) {
+    director.film {
+      num_actors as count(starring)
+    }
+    average as avg(val(num_actors))
+  }
+
+  films(func: uid(ID)) {
+    director_id : uid
+    english_name : name@en
+    average_actors : val(average)
+    num_films : count(director.film)
+
+    films : director.film {
+      name : name@en
+      english_name : name@en
+      french_name : name@fr
+    }
+  }
+}
+```
+结果
+```
+{
+  "data": {
+    "films": [
+      {
+        "director_id": "0x33a6",
+        "english_name": "Steven Wilsey",
+        "average_actors": 0,
+        "num_films": 1,
+        "films": [
+          {
+            "name": "At Night I Was Beautiful",
+            "english_name": "At Night I Was Beautiful"
+          }
+        ]
+      },
+      {
+        "director_id": "0x3ce3",
+        "english_name": "Steven Bratter",
+        "average_actors": 10,
+        "num_films": 1,
+        "films": [
+          {
+            "name": "First Strike",
+            "english_name": "First Strike"
+          }
+        ]
+      },
+      {
+        "director_id": "0x57c8",
+        "english_name": "Steven Saussey",
+        "average_actors": 3,
+        "num_films": 1,
+        "films": [
+          {
+            "name": "Whisker",
+            "english_name": "Whisker"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+### 分页
+分页只返回一部分结果集，而不是整个结果集。这对于top-k这样的查询以及减小结果集的大小，以便客户端处理是很有用。
+
+分页通常与排序一起使用。
+```
+注意如果未指定排序顺序，结果是会按uid进行排序的，而uid是随机分配的。因此，默认的排序可能不是您期望的。
+```
+
+### 开始First
+语法示例：
+
+ - q(func: ..., first: N)
+ - predicate (first: N) { ... }
+ - predicate @filter(...) (first: N) { ... }
+对于正数N，按排序或UID顺序检索返回前N个结果。
+
+对于负数N，按排序或UID顺序检索返回最后N个结果。当前，当前版本还只支持无任何排序的情况下的负数N。要获得带排序结果的负数的效果，请颠倒排序顺序并使用正数N。
+
+查询示例：按史蒂芬·斯皮尔伯格（Steven Spielberg）执导，按UID顺序排序的前两部电影，以及按英文名称按字母顺序排序的该电影的前三类流派。
+
+查询
+```
+{
+  me(func: allofterms(name@en, "Steven Spielberg")) {
+    director.film (first: -2) {
+      name@en
+      initial_release_date
+      genre (orderasc: name@en) (first: 3) {
+          name@en
+      }
+    }
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "me": [
+      {
+        "director.film": [
+          {
+            "name@en": "Firelight",
+            "initial_release_date": "1964-03-24T00:00:00Z",
+            "genre": [
+              {
+                "name@en": "Science Fiction"
+              },
+              {
+                "name@en": "Thriller"
+              }
+            ]
+          },
+          {
+            "name@en": "Amazing Stories: Book One",
+            "genre": [
+              {
+                "name@en": "Comedy"
+              },
+              {
+                "name@en": "Drama"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+查询示例：在所有名叫史蒂文的导演中导演最多的演员的三位名叫史蒂文的导演。
+
+查询
+```
+{
+  ID as var(func: allofterms(name@en, "Steven")) @filter(has(director.film)) {
+    director.film {
+      stars as count(starring)
+    }
+    totalActors as sum(val(stars))
+  }
+
+  mostStars(func: uid(ID), orderdesc: val(totalActors), first: 3) {
+    name@en
+    stars : val(totalActors)
+
+    director.film {
+      name@en
+    }
+  }
+}
+```
+
+响应
+```
+{
+  "data": {
+    "mostStars": [
+      {
+        "name@en": "Steven Spielberg",
+        "stars": 1665,
+        "director.film": [
+          {
+            "name@en": "Hook"
+          },
+          {
+            "name@en": "The Color Purple"
+          },
+          {
+            "name@en": "Amazing Stories: Book One"
+          }
+        ]
+      },
+      {
+        "name@en": "Steven Scarborough",
+        "stars": 1169,
+        "director.film": [
+          {
+            "name@en": "Kris Lord vs. Ken Ryker"
+          },
+          {
+            "name@en": "Dr.'s Orders 2: Dilation"
+          },
+          {
+            "name@en": "Screw: Right to the Point"
+          }
+        ]
+      },
+      {
+        "name@en": "Steven Soderbergh",
+        "stars": 1023,
+        "director.film": [
+          {
+            "name@en": "Out of Sight"
+          },
+          {
+            "name@en": "Schizopolis"
+          },
+          {
+            "name@en": "King of the Hill"
+          },
+          {
+            "name@en": "The Great Antonio"
+          },
+          {
+            "name@en": "Wholphin: Issue 2"
+          },
+          {
+            "name@en": "Life Interrupted"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+### 偏移offset
+语法示例
+ - q(func: ..., offset: N)
+ - predicate (offset: N) { ... }
+ - predicate (first: M, offset: N) { ... }
+ - predicate @filter(...) (offset: N) { ... }
+
+使用offset:N时，不返回前N个结果。与first一起综合使用的时候 , first: M, offset: N 结合使用：跳过N个结果并返回M个结果。
+
+查询示例：按英文名称查询徐克的电影，跳过前4部，然后返回以下6部
+
+查询
+```
+{
+  me(func: allofterms(name@en, "Hark Tsui")) {
+    name@zh
+    name@en
+    director.film (orderasc: name@en) (first:6, offset:4)  {
+      genre {
+        name@en
+      }
+      name@zh
+      name@en
+      initial_release_date
+    }
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "me": [
+      {
+        "name@zh": "徐克",
+        "name@en": "Tsui Hark",
+        "director.film": [
+          {
+            "genre": [
+              {
+                "name@en": "Science Fiction"
+              },
+              {
+                "name@en": "Superhero movie"
+              },
+              {
+                "name@en": "Action Film"
+              }
+            ],
+            "name@en": "Black Mask 2: City of Masks",
+            "initial_release_date": "2002-01-01T00:00:00Z"
+          },
+          {
+            "genre": [
+              {
+                "name@en": "Adventure game"
+              },
+              {
+                "name@en": "Drama"
+              },
+              {
+                "name@en": "Action Film"
+              }
+            ],
+            "name@zh": "狄仁杰之通天帝国",
+            "name@en": "Detective Dee: Mystery of the Phantom Flame",
+            "initial_release_date": "2010-09-05T00:00:00Z"
+          },
+          {
+            "genre": [
+              {
+                "name@en": "Thriller"
+              },
+              {
+                "name@en": "Crime Fiction"
+              },
+              {
+                "name@en": "Action Film"
+              }
+            ],
+            "name@en": "Don't Play with Fire",
+            "initial_release_date": "1980-12-04T00:00:00Z"
+          },
+          {
+            "genre": [
+              {
+                "name@en": "Thriller"
+              },
+              {
+                "name@en": "Buddy film"
+              }
+            ],
+            "name@en": "Double Team",
+            "initial_release_date": "1997-04-04T00:00:00Z"
+          },
+          {
+            "genre": [
+              {
+                "name@en": "Adventure Film"
+              },
+              {
+                "name@en": "Action Film"
+              }
+            ],
+            "name@zh": "龙门飞甲",
+            "name@en": "Flying Swords of Dragon Gate",
+            "initial_release_date": "2011-12-15T00:00:00Z"
+          },
+          {
+            "genre": [
+              {
+                "name@en": "World cinema"
+              },
+              {
+                "name@en": "Fantasy Adventure"
+              }
+            ],
+            "name@zh": "青蛇",
+            "name@en": "Green Snake",
+            "initial_release_date": "1993-01-01T00:00:00Z"
+          }
+        ]
+      },
+      {
+        "name@zh": "小倩",
+        "name@en": "A Chinese Ghost Story: The Tsui Hark Animation"
+      },
+      {
+        "name@en": "Tsui Hark Movie Studio"
+      }
+    ]
+  }
+}
+```
+### After
+语法示例：
+
+ - q(func: ..., after: UID)
+ - predicate (first: N, after: UID) { ... }
+ - predicate @filter(...) (first: N, after: UID) { ... }
+跳过某些结果后获得结果的另一种方法是使用默认的UID排序并直接跳过UID指定的节点。例如，第一个查询的形式可能是predicate (after: 0x0, first: N)，也可能predicate(after: <uid of last entity in last result>, first: N)。
+
+查询示例：巴兹·鲁曼（Baz Luhrmann）的前五部电影，按UID顺序排序。
+
+查询
+```
+{
+  me(func: allofterms(name@en, "Baz Luhrmann")) {
+    name@en
+    director.film (first:5) {
+      uid
+      name@en
+    }
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "me": [
+      {
+        "name@en": "Baz Luhrmann",
+        "director.film": [
+          {
+            "uid": "0x434",
+            "name@en": "The Great Gatsby"
+          },
+          {
+            "uid": "0x1e0d",
+            "name@en": "Strictly Ballroom"
+          },
+          {
+            "uid": "0x11bdb",
+            "name@en": "Moulin Rouge!"
+          },
+          {
+            "uid": "0x27c60",
+            "name@en": "Romeo + Juliet"
+          },
+          {
+            "uid": "0x2e760",
+            "name@en": "Australia"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+第五部电影是澳大利亚电影经典“Strictly Ballroom”。它具有UID 0x99e44。现在可以使用after获得“Strictly Ballroom”之后的结果。
+```
+{
+  me(func: allofterms(name@en, "Baz Luhrmann")) {
+    name@en
+    director.film (first:5, after: 0x99e44) {
+      uid
+      name@en
+    }
+  }
+}
+```
+结果
+```
+{
+  "data": {
+    "me": [
+      {
+        "name@en": "Baz Luhrmann",
+        "director.film": [
+          {
+            "uid": "0xce247",
+            "name@en": "Puccini: La Boheme (Sydney Opera)"
+          },
+          {
+            "uid": "0xe40e5",
+            "name@en": "No. 5 the Film"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### 计数 Count
+语法示例：
+
+ - count(predicate)
+ - count(uid)
+形式count(predicate)计算从一个节点引出的谓词边数。
+
+形式count(uid)对封闭块中匹配的UID的数量进行计数。
+
+查询示例：每个叫奥兰多的演员表演的电影数量。
+
+查询
+```
+{
+  me(func: allofterms(name@en, "Orlando")) @filter(has(actor.film)) {
+    name@en
+    count(actor.film)
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "me": [
+      {
+        "name@en": "Orlando Seale",
+        "count(actor.film)": 13
+      },
+      {
+        "name@en": "Antonio Orlando",
+        "count(actor.film)": 5
+      },
+      {
+        "name@en": "Orlando Viera",
+        "count(actor.film)": 1
+      },
+      {
+        "name@en": "Silvio Orlando",
+        "count(actor.film)": 32
+      },
+      {
+        "name@en": "Orazio Orlando",
+        "count(actor.film)": 9
+      },
+      {
+        "name@en": "Orlando Fagin",
+        "count(actor.film)": 1
+      }
+    ]
+  }
+}
+```
+可以在根使用计数，也可以使用别名。
+
+查询示例：导演超过五部电影的导演人数。在查询的根使用时，计数索引是必需的。
+
+查询
+```
+{
+  directors(func: gt(count(director.film), 5)) {
+    totalDirectors : count(uid)
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "directors": [
+      {
+        "totalDirectors": 7712
+      }
+    ]
+  }
+}
+```
+可以将计数分配给值变量。
+
+查询示例：按所上映的电影数量排序的李安（Ang Lee）的“饮食男人女人”（Eat Drink Man Woman）中的演员。
+查询
+```
+{
+  var(func: allofterms(name@en, "eat drink man woman")) {
+    starring {
+      actors as performance.actor {
+        totalRoles as count(actor.film)
+      }
+    }
+  }
+
+  edmw(func: uid(actors), orderdesc: val(totalRoles)) {
+    name@en
+    name@zh
+    totalRoles : val(totalRoles)
+  }
+}
+```
+结果
+```
+{
+  "data": {
+    "edmw": [
+      {
+        "name@en": "Sylvia Chang",
+        "name@zh": "张艾嘉",
+        "totalRoles": 35
+      },
+      {
+        "name@en": "Chien-lien Wu",
+        "name@zh": "吴倩莲",
+        "totalRoles": 20
+      },
+      {
+        "name@en": "Yang Kuei-mei",
+        "name@zh": "杨贵媚",
+        "totalRoles": 14
+      },
+      {
+        "name@en": "Winston Chao",
+        "name@zh": "赵文瑄",
+        "totalRoles": 11
+      },
+      {
+        "name@en": "Gua Aleh",
+        "name@zh": "归亚蕾",
+        "totalRoles": 10
+      },
+      {
+        "name@en": "Chung Ting",
+        "totalRoles": 1
+      },
+      {
+        "name@en": "Chin-Cheng Lu",
+        "totalRoles": 1
+      }
+    ]
+  }
+}
+```
+
+### 排序 Sorting
+语法示例：
+
+ - q(func: ..., orderasc: predicate)
+ - q(func: ..., orderdesc: val(varName))
+ - predicate (orderdesc: predicate) { ... }
+ - predicate @filter(...) (orderasc: N) { ... }
+ - q(func: ..., orderasc: predicate1, orderdesc: predicate2)
+可排序的类型：int, float, String, dateTime, default （整数，浮点数，字符串，日期时间，默认值）
+
+结果可以由谓词或变量按升序（orderasc）或降序（orderdesc）排序。
+
+为了对可排序索引的谓词进行排序，Dgraph对值和索引进行并行排序，并返回优先计算的结果。
+
+默认情况下，查询最多检索已排序的1000个结果。不过结果可以用First更改。
+
+查询示例：按发布日期排序法国导演让·皮埃尔·朱内（Jean-Pierre Jeunet）的电影。
+
+查询
+```
+{
+  me(func: allofterms(name@en, "Jean-Pierre Jeunet")) {
+    name@fr
+    director.film(orderasc: initial_release_date) {
+      name@fr
+      name@en
+      initial_release_date
+    }
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "me": [
+      {
+        "name@fr": "Jean-Pierre Jeunet",
+        "director.film": [
+          {
+            "name@fr": "L'Évasion",
+            "name@en": "L'évasion",
+            "initial_release_date": "1978-01-01T00:00:00Z"
+          },
+          {
+            "name@fr": "Micmacs à tire-larigot",
+            "name@en": "Micmacs",
+            "initial_release_date": "2009-09-15T00:00:00Z"
+          },
+          {
+            "name@fr": "L'Extravagant Voyage du jeune et prodigieux T. S. Spivet",
+            "name@en": "The Young and Prodigious Spivet",
+            "initial_release_date": "2013-09-28T00:00:00Z"
+          }
+        ]
+      }
+    ]
+  }
+}
+``` 
+排序可以在根和值变量上操作。
+
+查询示例：按字母顺序排序所有流派，每种流派中最多的五个电影。
+
+查询
+```
+{
+  genres as var(func: has(~genre)) {
+    ~genre {
+      numGenres as count(genre)
+    }
+  }
+
+  genres(func: uid(genres), orderasc: name@en) {
+    name@en
+    ~genre (orderdesc: val(numGenres), first: 5) {
+      name@en
+      genres : val(numGenres)
+    }
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "genres": [
+      {
+        "name@en": "/m/04rlf",
+        "~genre": [
+          {
+            "name@en": "Bookin'",
+            "genres": 3
+          },
+          {
+            "name@en": "La brune et moi",
+            "genres": 3
+          }
+        ]
+      },
+      {
+        "name@en": "3D film",
+        "~genre": [
+          {
+            "name@en": "Mr. X",
+            "genres": 4
+          },
+          {
+            "name@en": "Sly Cooper",
+            "genres": 4
+          },
+          {
+            "name@en": "Aqaye Alef",
+            "genres": 1
+          }
+        ]
+      },
+      {
+        "name@en": "Abstract animation",
+        "~genre": [
+          {
+            "name@en": "The Heart of the World",
+            "genres": 7
+          },
+          {
+            "name@en": "Acousticity",
+            "genres": 4
+          },
+          {
+            "name@en": "The Garden of Earthly Delights",
+            "genres": 4
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+排序也可以由多个谓词执行，如下所示。如果第一个谓词的值相等，则按第二个谓词对它们进行排序，依此类推。
+
+查询示例：查找所有类型为Person的节点，按其first_name对其排序，在具有相同first_name的那些节点中，按last_name降序对其进行排序。
+```
+{
+  me(func: type("Person"), orderasc: first_name, orderdesc: last_name) {
+    first_name
+    last_name
+  }
+}
+```
+### 多个查询块
+在单个查询中，允许多个查询块。结果是所有具有相应块名称的块。
+
+多个查询块是并行执行。
+
+多个块之间无需以任何方式关联。
+
+查询示例：自2008年以来的安吉丽娜·朱莉（Angelina Jolie）的所有电影和流派，以及彼得·杰克逊（Peter Jackson）电影。
+
+查询
+```
+{
+ AngelinaInfo(func:allofterms(name@en, "angelina jolie")) {
+  name@en
+   actor.film {
+    performance.film {
+      genre {
+        name@en
+      }
+    }
+   }
+  }
+
+ DirectorInfo(func: eq(name@en, "Peter Jackson")) {
+    name@en
+    director.film @filter(ge(initial_release_date, "2008"))  {
+        Release_date: initial_release_date
+        Name: name@en
+    }
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "AngelinaInfo": [
+      {
+        "name@en": "Angelina Jolie",
+        "actor.film": [
+          {
+            "performance.film": [
+              {
+                "genre": [
+                  {
+                    "name@en": "Short Film"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "performance.film": [
+              {
+                "genre": [
+                  {
+                    "name@en": "Slice of life"
+                  },
+                  {
+                    "name@en": "Ensemble Film"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "performance.film": [
+              {
+                "genre": [
+                  {
+                    "name@en": "Animation"
+                  },
+                  {
+                    "name@en": "Comedy"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+如果查询的答案中有一些重叠，但是结果集仍然会是独立的。
+
+查询示例：参与了电影Mackenzie Crook的，参与了的电影Jack Davenport。因为它们都在加勒比海盗电影中扮演过，所以结果集是重叠的，但是返回的结果是独立的，并且都包含完整的答案集。
+
+查询
+```
+{
+  Mackenzie(func:allofterms(name@en, "Mackenzie Crook")) {
+    name@en
+    actor.film {
+      performance.film {
+        uid
+        name@en
+      }
+      performance.character {
+        name@en
+      }
+    }
+  }
+
+  Jack(func:allofterms(name@en, "Jack Davenport")) {
+    name@en
+    actor.film {
+      performance.film {
+        uid
+        name@en
+      }
+      performance.character {
+        name@en
+      }
+    }
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "Mackenzie": [
+      {
+        "name@en": "Mackenzie Crook",
+        "actor.film": [
+          {
+            "performance.film": [
+              {
+                "uid": "0x7f33f",
+                "name@en": "Sex Lives of the Potato Men"
+              }
+            ]
+          },
+          {
+            "performance.film": [
+              {
+                "uid": "0x842bf",
+                "name@en": "Solomon Kane"
+              }
+            ],
+            "performance.character": [
+              {
+                "name@en": "Father Michael"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+### Var块
+Var块是以关键字var开头，并且不会在查询结果中返回。
+
+查询示例：按流派排序的安吉丽娜·朱莉的电影。
+
+查询
+```
+{
+  var(func:allofterms(name@en, "angelina jolie")) {
+    name@en
+    actor.film {
+      A AS performance.film {
+        B AS genre
+      }
+    }
+  }
+
+  films(func: uid(B), orderasc: name@en) {
+    name@en
+    ~genre @filter(uid(A)) {
+      name@en
+    }
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "films": [
+      {
+        "name@en": "Action Film",
+        "~genre": [
+          {
+            "name@en": "Gone in 60 Seconds"
+          },
+          {
+            "name@en": "Kung Fu Panda"
+          },
+          {
+            "name@en": "Lara Croft Tomb Raider: The Cradle of Life"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+### 查询变量
+语法示例：
+
+ - varName as q(func: ...) { ... }
+ - varName as var(func: ...) { ... }
+ - varName as predicate { ... }
+ - varName as predicate @filter(...) { ... }
+类型：uid
+
+可以将在查询中某个位置匹配的节点（UID）存储在变量中，并在其他位置使用。查询变量可以在其他查​​询块或定义块的子节点中使用。
+
+查询变量在定义时不影响查询的语义。查询变量会在匹配的定义块的所有节点求值。
+
+通常，查询块是并行执行的，但是变量会影响某些块的评估顺序。注意，是不允许由变量依赖性引起的循环的。
+
+如果定义了变量，则必须在查询中的其他地方使用它。
+
+通过使用uid(var-name)这种形式，可以提取UID到查询变量。
+
+语法func: uid(A,B)或@filter(uid(A,B))表示变量A和B的UID的并集。
+
+查询示例：Angelia Jolie和Brad Pitt的电影都曾在同一类型的电影中扮演过角色。请注意，B和D匹配所有电影的所有类型，而不是每个电影的类型。
+
+查询
+```
+{
+ var(func:allofterms(name@en, "angelina jolie")) {
+   actor.film {
+    A AS performance.film {  # All films acted in by Angelina Jolie
+     B As genre  # Genres of all the films acted in by Angelina Jolie
+    }
+   }
+  }
+
+ var(func:allofterms(name@en, "brad pitt")) {
+   actor.film {
+    C AS performance.film {  # All films acted in by Brad Pitt
+     D as genre  # Genres of all the films acted in by Brad Pitt
+    }
+   }
+  }
+
+ films(func: uid(D)) @filter(uid(B)) {   # Genres from both Angelina and Brad
+  name@en
+   ~genre @filter(uid(A, C)) {  # Movies in either A or C.
+     name@en
+   }
+ }
+}
+```
+响应
+```
+{
+  "data": {
+    "films": [
+      {
+        "name@en": "War film",
+        "~genre": [
+          {
+            "name@en": "Two-Fisted Tales"
+          },
+          {
+            "name@en": "Inglourious Basterds"
+          },
+          {
+            "name@en": "Fury"
+          }
+        ]
+      },
+      {
+        "name@en": "Indie film",
+        "~genre": [
+          {
+            "name@en": "Babel"
+          },
+          {
+            "name@en": "Hunk"
+          },
+          {
+            "name@en": "Happy Together"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+### 值变量
+语法示例：
+
+ - varName as scalarPredicate
+ - varName as count(predicate)
+ - varName as avg(...)
+ - varName as math(...)
+类型：int，float，String，dateTime，default，geo，bool
+
+值变量是用来存储标量值的。值变量是从封闭块的UID到相应值的映射。
+
+因此，只有在与相同UID匹配的上下文中使用来自值的变量的值才有意义-如果在与不同UID匹配的块中使用，则值变量是未定义的。
+
+定义值变量但在查询中的其他地方不使用它是错误的。
+
+通过使用val(var-name)来提取提取值或使用uid(var-name)提取UID。
+
+Facet 构面值可以存储在值变量中(就是键值对)。
+
+查询示例：80年代经典电影《公主新娘》的演员扮演的电影的角色数量。查询变量pbActors与影片中所有演员的UID匹配。因此，值变量roles是从角色UID到角色数量的映射。可以在totalRoles查询块中使用值变量roles，因为该查询块还与pbActors 的UID匹配，因此可以使用actor到角色数的映射。
+
+查询
+```
+{
+  var(func:allofterms(name@en, "The Princess Bride")) {
+    starring {
+      pbActors as performance.actor {
+        roles as count(actor.film)
+      }
+    }
+  }
+  totalRoles(func: uid(pbActors), orderasc: val(roles)) {
+    name@en
+    numRoles : val(roles)
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "totalRoles": [
+      {
+        "name@en": "Mark Knopfler",
+        "numRoles": 1
+      },
+      {
+        "name@en": "Annie Dyson",
+        "numRoles": 2
+      },
+      {
+        "name@en": "André the Giant",
+        "numRoles": 7
+      },
+      {
+        "name@en": "Malcolm Storry",
+        "numRoles": 11
+      },
+      {
+        "name@en": "Margery Mason",
+        "numRoles": 12
+      }
+    ]
+  }
+}
+```
+可以使用值变量代替UID变量, 因为能通过从映射中提取到UID列表。
+
+查询示例：与上一示例相同的查询，但是使用值变量roles来匹配totalRoles查询块中的UID。
+
+查询
+```
+{
+  var(func:allofterms(name@en, "The Princess Bride")) {
+    starring {
+      performance.actor {
+        roles as count(actor.film)
+      }
+    }
+  }
+  totalRoles(func: uid(roles), orderasc: val(roles)) {
+    name@en
+    numRoles : val(roles)
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "totalRoles": [
+      {
+        "name@en": "Mark Knopfler",
+        "numRoles": 1
+      },
+      {
+        "name@en": "Annie Dyson",
+        "numRoles": 2
+      },
+      {
+        "name@en": "André the Giant",
+        "numRoles": 7
+      },
+      {
+        "name@en": "Malcolm Storry",
+        "numRoles": 11
+      },
+      {
+        "name@en": "Margery Mason",
+        "numRoles": 12
+      }
+    ]
+  }
+}
+```
+### 变量的传播
+像查询变量一样，值变量可用于其他查询块和嵌套在定义块中的块中。当在定义变量的块内嵌套的块中使用时，该值将作为沿使用点的所有路径的父节点的变量的和来计算。这称为变量传播。
+
+例如：
+```
+{
+  q(func: uid(0x01)) {
+    myscore as math(1)          # A
+    friends {                   # B
+      friends {                 # C
+        ...myscore...
+      }
+    }
+  }
+}
+```
+ 
+在A行，将值变量myscore定义为UID 0x01到值1的映射节点。在B处，每个朋友的值仍为1：每个朋友只有一条路径。传播变量myscore，以便每个朋友的朋友将收到其父代值的总和：如果一个朋友的朋友只能从一个朋友访问，则该值仍为1，如果他们可以从两个朋友访问，则值为2，依此类推。也就是说，标记为C的块中每个朋友的myscore的值将是通往他们的路径的数量。
+
+传播变量接收节点收到的值是其所有父节点的值的和。
+
+例如，这种传播在以下方面很有用：对用户之间的总和进行归一化，找到节点之间的路径数并通过图累积和。
+
+查询示例：对于每部《哈利波特》电影，演员沃里克·戴维斯扮演的角色数量。
+
+查询
+```
+{
+    num_roles(func: eq(name@en, "Warwick Davis")) @cascade @normalize {
+
+    paths as math(1)  # records number of paths to each character
+
+    actor : name@en
+
+    actor.film {
+      performance.film @filter(allofterms(name@en, "Harry Potter")) {
+        film_name : name@en
+        characters : math(paths)  # how many paths (i.e. characters) reach this film
+      }
+    }
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "num_roles": [
+      {
+        "actor": "Warwick Davis",
+        "characters": 1,
+        "film_name": "Harry Potter and the Prisoner of Azkaban"
+      },
+      {
+        "actor": "Warwick Davis",
+        "characters": 1,
+        "film_name": "Harry Potter and the Goblet of Fire"
+      },
+      {
+        "actor": "Warwick Davis",
+        "characters": 2,
+        "film_name": "Harry Potter and the Deathly Hallows – Part 2"
+      },
+      {
+        "actor": "Warwick Davis",
+        "characters": 1,
+        "film_name": "Harry Potter and the Deathly Hallows - Part I"
+      }
+    ]
+  }
+}
+```
+查询示例：曾在彼得·杰克逊（Peter Jackson）电影中出演的每个演员，以及他们曾出演过的彼得·杰克逊（Peter Jackson）电影中的时长。
+
+查询
+```
+{
+    movie_fraction(func:eq(name@en, "Peter Jackson")) @normalize {
+
+    paths as math(1)
+    total_films : num_films as count(director.film)
+    director : name@en
+
+    director.film {
+      starring {
+        performance.actor {
+          fraction : math(paths / (num_films/paths))
+          actor : name@en
+        }
+      }
+    }
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "movie_fraction": [
+      {
+        "actor": "Pete O'Herne",
+        "director": "Peter Jackson",
+        "fraction": 0,
+        "total_films": 19
+      },
+      {
+        "actor": "Peter Jackson",
+        "director": "Peter Jackson",
+        "fraction": 0,
+        "total_films": 19
+      },
+      {
+        "actor": "Peter Jackson",
+        "director": "Peter Jackson",
+        "fraction": 0,
+        "total_films": 19
+      }
+    ]
+  }
+}
+```
+
+### 聚合Aggregation
+语法范例：AG(val(varName))
+
+对于AG替换为
+
+min：在值变量varName中选择最小值
+max：选择最大值
+sum：将值变量varName中的所有值相加
+avg：计算varName中值的平均值
+模式类型：
+
+聚合架构类型
+最小/最大整数，浮点数，字符串，日期时间，默认值
+sum / avg int，浮点数
+汇总只能应用于值变量。不需要索引（已经找到值并将其存储在值变量映射中）。
+
+将聚合应用于包含变量定义的查询块。与全局的查询变量和值变量相反，聚合是在本地计算的。例如：
+
+以谓词A {
+  ...
+  B作为谓词B {
+    x作为...一些价值...
+  }
+  最小（val（x））
+}
+复制
+此处，A和B是与这些块匹配的所有UID的列表。值变量x是从B中的UID到值的映射。但是，针对A中的每个UID计算聚合min（val（x））。即，其语义为：对于A中的每个UID，取与A的传出谓词B边相对应的x的切片并计算这些值的汇总。
+
+可以将聚合本身分配给值变量，从而将UID映射到聚合映射。
+
+敏
+根使用
+查询示例：获取任何哈利波特电影的最小初始发行日期。
+
+将发布日期分配给变量，然后将其汇总并在一个空块中获取。
+
+查询Go Java Python JavaScript（gRPC）JavaScript（HTTP）卷曲
+跑
+{
+  var（func：allofterms（name @ en，“ Harry Potter”））{
+    d作为initial_release_date
+  }
+  我（） {
+    min（val（d））
+  }
+}
+ 编辑查询复制
+响应
+ 复制
+其他级别的用法
+查询示例：导演呼叫了史蒂文（Steven），并按照首部电影的升序排列了首部电影的发行日期。
+
+查询Go Java Python JavaScript（gRPC）JavaScript（HTTP）卷曲
+跑
+{
+  史蒂文斯（var）（func：allofterms（name @ en，“ steven”））{
+    电影导演
+      作为initial_release_date的ird
+      ＃ird是一个值变量，将电影UID映射到其发行日期
+    }
+    minIRD为min（val（ird））
+    ＃minIRD是一个将导演UID映射到其首次发布日期的值变量
+  }
+
+  byIRD（func：uid（stevens），orderasc：val（minIRD））{
+    名字@en
+    firstRelease：val（minIRD）
+  }
+}
+ 编辑查询复制
+响应
+ 复制
+最高
+根使用
+查询示例：获取任何哈利波特电影的最大初始发行日期。
+
+将发布日期分配给变量，然后将其汇总并在一个空块中获取。
+
+查询Go Java Python JavaScript（gRPC）JavaScript（HTTP）卷曲
+跑
+{
+  var（func：allofterms（name @ en，“ Harry Potter”））{
+    d作为initial_release_date
+  }
+  我（） {
+    最大（val（d））
+  }
+}
+ 编辑查询复制
+响应
+ 复制
+其他级别的用法
+查询示例：昆汀·塔伦蒂诺（Quentin Tarantino）的电影以及最新电影的发行日期。
+
+查询Go Java Python JavaScript（gRPC）JavaScript（HTTP）卷曲
+跑
+{
+  导演（func：allofterms（name @ en，“昆汀·塔伦蒂诺”））{
+    电影导演
+      名字@en
+      x作为initial_release_date
+    }
+    最大（val（x））
+  }
+}
+ 编辑查询复制
+响应
+ 复制
+总和平均
+根使用
+查询示例：获取以史蒂文或汤姆为名的人执导的电影总数的总和。
+
+查询Go Java Python JavaScript（gRPC）JavaScript（HTTP）卷曲
+跑
+{
+  var（func：anyofterms（name @ en，“史蒂芬·汤姆”））{
+    作为计数（director.film）
+  }
+
+  我（） {
+    avg（val（a））
+    总和（val（a））
+  }
+}
+ 编辑查询复制
+响应
+ 复制
+其他级别的用法
+查询示例：史蒂芬·斯皮尔伯格（Steven Spielberg）的电影，以及每部电影的录制流派数以及每部电影的流派总数和平均流派。
+
+查询Go Java Python JavaScript（gRPC）JavaScript（HTTP）卷曲
+跑
+{
+  导演（func：eq（name @ en，“史蒂芬·斯皮尔伯格”）
+    名字@en
+    电影导演
+      名字@en
+      numGenres：g作为count（类型）
+    }
+    totalGenres：sum（val（g））
+    genresPerMovie：avg（val（g））
+  }
+}
+ 编辑查询复制
+响应
+ 复制
+汇总汇总
+可以将汇总分配给值变量，因此可以依次汇总这些变量。
+
+查询示例：对于彼得·杰克逊（Peter Jackson）电影中的每个演员，请查找任何电影中扮演的角色数量。将这些内容相加即可得出电影中所有演员曾经扮演的角色总数。然后总结一下，找出彼得·杰克逊电影中曾出现过的演员所扮演的角色总数。请注意，这演示了如何聚合聚合；不过，这种情况下的答案并不十分准确，因为在多部彼得·杰克逊（Peter Jackson）电影中出演的演员都被计算了一次以上。
+
+查询Go Java Python JavaScript（gRPC）JavaScript（HTTP）卷曲
+跑
+{
+  PJ as var（func：allofterms（name @ en，“ Peter Jackson”））{
+    电影导演
+      主演{＃主演演员
+        表演演员{
+          电影作为计数（actor.film）
+          ＃这个演员的角色数量
+        }
+        perf_total为sum（val（movies））
+      }
+      movie_total作为sum（val（perf_total））
+      ＃个总角色
