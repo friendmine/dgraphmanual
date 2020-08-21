@@ -5159,3 +5159,943 @@ err := c.Alter(context.Background(), &api.Operation{
 ### 扩展查询和类型
 使用expand（即expand(_all_)）的查询，要求要扩展的节点具有类型。
 
+### 构面：边属性
+Dgraph支持构面（边上的键值对），作为对RDF三元组的扩展。即，构面将属性添加到边而不是节点上。例如，两个节点之间的朋友边可能具有紧密友谊的布尔属性。构面也可用作边的权重。
+
+尽管您可能会发现自己多次倾向于刻面，但是不应滥用它们。给朋友边一个日期为date_of_birth的模型并不是正确的。那对朋友来说应该是边。但是，像start_of_friendship这样的方面可能是合适的。但是，构面并非像谓词一样在Dgraph中是一等公民。
+
+构面键是字符串，值可以是string，bool，int，float和dateTime。对于int和float，仅接受32位带符号整数和64位float。
+
+在本节的各个构面都使用以下突变操作。该突变为某些人添加了数据，例如，在手机和汽车中记录了一个since，以记录爱丽丝何时购买汽车并开始使用手机号码。
+
+首先，我们添加一些架构。
+```
+curl localhost:8080/alter -XPOST -d $'
+    name: string @index(exact, term) .
+    rated: [uid] @reverse @count .
+' | python -m json.tool | less
+```
+```
+curl -H "Content-Type: application/rdf" localhost:8080/mutate?commitNow=true -XPOST -d $'
+{
+  set {
+
+    # -- Facets on scalar predicates
+    _:alice <name> "Alice" .
+    _:alice <dgraph.type> "Person" .
+    _:alice <mobile> "040123456" (since=2006-01-02T15:04:05) .
+    _:alice <car> "MA0123" (since=2006-02-02T13:01:09, first=true) .
+
+    _:bob <name> "Bob" .
+    _:bob <dgraph.type> "Person" .
+    _:bob <car> "MA0134" (since=2006-02-02T13:01:09) .
+
+    _:charlie <name> "Charlie" .
+    _:charlie <dgraph.type> "Person" .
+    _:dave <name> "Dave" .
+    _:dave <dgraph.type> "Person" .
+
+
+    # -- Facets on UID predicates
+    _:alice <friend> _:bob (close=true, relative=false) .
+    _:alice <friend> _:charlie (close=false, relative=true) .
+    _:alice <friend> _:dave (close=true, relative=true) .
+
+
+    # -- Facets for variable propagation
+    _:movie1 <name> "Movie 1" .
+    _:movie1 <dgraph.type> "Movie" .
+    _:movie2 <name> "Movie 2" .
+    _:movie2 <dgraph.type> "Movie" .
+    _:movie3 <name> "Movie 3" .
+    _:movie3 <dgraph.type> "Movie" .
+
+    _:alice <rated> _:movie1 (rating=3) .
+    _:alice <rated> _:movie2 (rating=2) .
+    _:alice <rated> _:movie3 (rating=5) .
+
+    _:bob <rated> _:movie1 (rating=5) .
+    _:bob <rated> _:movie2 (rating=5) .
+    _:bob <rated> _:movie3 (rating=5) .
+
+    _:charlie <rated> _:movie1 (rating=2) .
+    _:charlie <rated> _:movie2 (rating=5) .
+    _:charlie <rated> _:movie3 (rating=1) .
+  }
+}' | python -m json.tool | less
+```
+
+### 在标量谓词上构面
+
+查询爱丽丝的名字，手机和汽车会得到与没有构面相同的结果。
+查询
+```
+{
+  data(func: eq(name, "Alice")) {
+     name
+     mobile
+     car
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "data": [
+      {
+        "name": "Alice",
+        "mobile": "040123456",
+        "car": "MA0123"
+      }
+    ]
+  }
+}
+```
+语法@facets(facet-name)用于查询构面数据。 对于爱丽丝，以下是有关手机和汽车方面的问题。
+查询
+```
+{
+  data(func: eq(name, "Alice")) {
+     name
+     mobile @facets(since)
+     car @facets(since)
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "data": [
+      {
+        "name": "Alice",
+        "mobile|since": "2006-01-02T15:04:05Z",
+        "mobile": "040123456",
+        "car|since": "2006-02-02T13:01:09Z",
+        "car": "MA0123"
+      }
+    ]
+  }
+}
+```
+构面以与相应边的相同的级别一同返回，并具有类似于构面的键。
+
+使用@facets查询边上的所有构面。
+查询
+```
+{
+  data(func: eq(name, "Alice")) {
+     name
+     mobile @facets
+     car @facets
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "data": [
+      {
+        "name": "Alice",
+        "mobile|since": "2006-01-02T15:04:05Z",
+        "mobile": "040123456",
+        "car|first": true,
+        "car|since": "2006-02-02T13:01:09Z",
+        "car": "MA0123"
+      }
+    ]
+  }
+}
+```
+### 构面的i18n
+
+构面键和值在突变时可以直接使用特定于语言的字符。 但是，查询时，构面键需要括在尖括号<>中。 这类似于谓词。 有关更多信息，请参见[谓词i18n](https://dgraph.io/docs/query-language/facets/#predicates-i18n)。
+```
+注意Dgraph在查询时支持构面键的国际化资源标识符（IRI）。
+```
+例子
+```
+{
+  set {
+    _:person1 <name> "Daniel" (वंश="स्पेनी", ancestry="Español") .
+    _:person1 <dgraph.type> "Person" .
+    _:person2 <name> "Raj" (वंश="हिंदी", ancestry="हिंदी") .
+    _:person2 <dgraph.type> "Person" .
+    _:person3 <name> "Zhang Wei" (वंश="चीनी", ancestry="中文") .
+    _:person3 <dgraph.type> "Person" .
+  }
+}
+```
+查询，要注意一下 <>
+```
+{
+  q(func: has(name)) {
+    name @facets(<वंश>)
+  }
+}
+```
+
+### 构面的别名
+可以在请求特定谓词时指定别名。 语法跟其它谓词别名的方法是类似的。 由于orderasc和orderdesc具有特殊含义，因此它们不能用作别名。 除此之外，其他任何东西都可以设置为别名。
+
+在这里，我们分别为car_since, close_friend设置为别名since, close。
+```
+{
+   data(func: eq(name, "Alice")) {
+     name
+     mobile
+     car @facets(car_since: since)
+     friend @facets(close_friend: close) {
+       name
+     }
+   }
+}
+```
+响应
+```
+{
+  "data": {
+    "data": [
+      {
+        "name": "Alice",
+        "mobile": "040123456",
+        "car_since": "2006-02-02T13:01:09Z",
+        "car": "MA0123",
+        "friend": [
+          {
+            "name": "Bob"
+          },
+          {
+            "name": "Charlie"
+          },
+          {
+            "name": "Dave"
+          }
+        ],
+        "close_friend": {
+          "0": true,
+          "1": false,
+          "2": true
+        }
+      }
+    ]
+  }
+}
+```
+### UID谓词上的构面
+UID边上的构面与值边上的构面类似。
+
+例如，“friend”是具有构面的边close。 对于爱丽丝和鲍勃之间的友谊，它设置为true；对于爱丽丝和查理之间的友谊，它设置为false。
+
+查询爱丽丝的朋友。
+```
+{
+  data(func: eq(name, "Alice")) {
+    name
+    friend {
+      name
+    }
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "data": [
+      {
+        "name": "Alice",
+        "friend": [
+          {
+            "name": "Bob"
+          },
+          {
+            "name": "Charlie"
+          },
+          {
+            "name": "Dave"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+一个查询朋友还有构面close的查询
+```
+{
+   data(func: eq(name, "Alice")) {
+     name
+     friend @facets(close) {
+       name
+     }
+   }
+}
+```
+响应
+```
+{
+  "data": {
+    "data": [
+      {
+        "name": "Alice",
+        "friend": [
+          {
+            "name": "Bob"
+          },
+          {
+            "name": "Charlie"
+          },
+          {
+            "name": "Dave"
+          }
+        ],
+        "friend|close": {
+          "0": true,
+          "1": false,
+          "2": true
+        }
+      }
+    ]
+  }
+}
+```
+对于像friend这样的uid边，构面将在键构面下转到相应的子结点。 在上面的示例中，您可以看到在爱丽丝和鲍勃之间的边上的闭合面与键“friend|close”一起出现，并且与鲍勃的结果一起出现。
+```
+{
+  data(func: eq(name, "Alice")) {
+    name
+    friend @facets {
+      name
+      car @facets
+    }
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "data": [
+      {
+        "name": "Alice",
+        "friend": [
+          {
+            "name": "Bob",
+            "car|since": "2006-02-02T13:01:09Z",
+            "car": "MA0134"
+          },
+          {
+            "name": "Charlie"
+          },
+          {
+            "name": "Dave"
+          }
+        ],
+        "friend|close": {
+          "0": true,
+          "1": false,
+          "2": true
+        },
+        "friend|relative": {
+          "0": false,
+          "1": true,
+          "2": true
+        }
+      }
+    ]
+  }
+}
+```
+鲍勃有car，并且由于它有一个构面，since，在car|since下，是鲍勃相同的对象的一部分。 另外，鲍勃和爱丽丝之间的close关系也是鲍勃输出对象的一部分。 查理（Charlie）没有car边，因此只有UID构面。
+
+### 过滤构面
+Dgraph支持基于构面过滤边。 过滤的工作方式与无构面的边类似，并且具有相同的可用功能。
+
+寻找爱丽丝的密友
+```
+{
+  data(func: eq(name, "Alice")) {
+    friend @facets(eq(close, true)) {
+      name
+    }
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "data": [
+      {
+        "friend": [
+          {
+            "name": "Bob"
+          },
+          {
+            "name": "Dave"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+通过在查询中增加@facets(<facetname>)， 返回过滤与构面.
+```
+{
+  data(func: eq(name, "Alice")) {
+    friend @facets(eq(close, true)) @facets(relative) { # filter close friends and give relative status
+      name
+    }
+  }
+}
+``` 
+响应
+```
+{
+  "data": {
+    "data": [
+      {
+        "friend": [
+          {
+            "name": "Bob"
+          },
+          {
+            "name": "Dave"
+          }
+        ],
+        "friend|relative": {
+          "0": false,
+          "1": true
+        }
+      }
+    ]
+  }
+}
+```
+构面也是可以使用AND，OR，NOT来组合的。
+```
+{
+  data(func: eq(name, "Alice")) {
+    friend @facets(eq(close, true) AND eq(relative, true)) @facets(relative) { # filter close friends in my relation
+      name
+    }
+  }
+}
+```
+
+响应
+```
+{
+  "data": {
+    "data": [
+      {
+        "friend": [
+          {
+            "name": "Dave"
+          }
+        ],
+        "friend|relative": {
+          "0": true
+        }
+      }
+    ]
+  }
+}
+```
+
+### 最短路径查询
+
+使用查询块名称的最短关键字，可以找到源（from）节点到目标（to）节点之间的最短路径。它需要遍历时必须考虑的源节点UID，目标节点UID和谓词（至少一个）。最短查询块会在返回查询响应中_path_下的最短路径。路径也可以存储在其他查询块中使用的变量中。
+
+K最短路径查询：默认情况下，返回最短路径。如果使用numpaths：k，且k> 1，则返回k个最短路径。循环路径会从k最短路径查询的结果中删除。使用depth：n，会返回最远n个深度的路径。
+```
+注意
+ - 如果在最短程序段中未指定谓词，则不会遍历任何边，因为无法获取路径。
+ - 如果您看到查询需要很长时间，则可以设置gRPC截止时间以在一定时间后停止查询。
+```
+例如：
+
+```
+curl localhost:8080/alter -XPOST -d $'
+    name: string @index(exact) .
+' | python -m json.tool | less
+```
+```
+curl -H "Content-Type: application/rdf" localhost:8080/mutate?commitNow=true -XPOST -d $'
+{
+  set {
+    _:a <friend> _:b (weight=0.1) .
+    _:b <friend> _:c (weight=0.2) .
+    _:c <friend> _:d (weight=0.3) .
+    _:a <friend> _:d (weight=1) .
+    _:a <name> "Alice" .
+    _:a <dgraph.type> "Person" .
+    _:b <name> "Bob" .
+    _:b <dgraph.type> "Person" .
+    _:c <name> "Tom" .
+    _:c <dgraph.type> "Person" .
+    _:d <name> "Mallory" .
+    _:d <dgraph.type> "Person" .
+  }
+}' | python -m json.tool | less
+
+```
+
+可以通过查询找到Alice和Mallory之间的最短路径（分别假设UID为0x2和0x5）：
+```
+curl -H "Content-Type: application/graphql+-" localhost:8080/query -XPOST -d $'{
+ path as shortest(from: 0x2, to: 0x5) {
+  friend
+ }
+ path(func: uid(path)) {
+   name
+ }
+}' | python -m json.tool | less
+
+```
+
+返回以下结果。 （请注意，在不考虑权重面的情况下，每个边的权重均视为1）
+```
+{
+  "data": {
+    "path": [
+      {
+        "name": "Alice"
+      },
+      {
+        "name": "Mallory"
+      }
+    ],
+    "_path_": [
+      {
+        "uid": "0x2",
+        "friend": [
+          {
+            "uid": "0x5"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+我们可以通过指定numpaths返回更多路径。设置numpaths：2返回最短的两个路径：
+```
+curl -H "Content-Type: application/graphql+-" localhost:8080/query -XPOST -d $'{
+
+ A as var(func: eq(name, "Alice"))
+ M as var(func: eq(name, "Mallory"))
+
+ path as shortest(from: uid(A), to: uid(M), numpaths: 2) {
+  friend
+ }
+ path(func: uid(path)) {
+   name
+ }
+}' | python -m json.tool | less
+
+```
+```
+注意在上面的查询中，我们不使用UID文字，而是使用var块和uid（）函数查询两个人。您也可以将其与[GraphQL变量](https://dgraph.io/docs/query-language/kshortest-path-quries/#graphql-variables)结合使用。
+```
+如下使用边上的构面来包括边权重。
+```
+注意最短查询块中每个谓词只允许一个构面。
+```
+```
+curl -H "Content-Type: application/graphql+-" localhost:8080/query -XPOST -d $'{
+ path as shortest(from: 0x2, to: 0x5) {
+  friend @facets(weight)
+ }
+
+ path(func: uid(path)) {
+  name
+ }
+}' | python -m json.tool | less
+```
+```
+{
+  "data": {
+    "path": [
+      {
+        "name": "Alice"
+      },
+      {
+        "name": "Bob"
+      },
+      {
+        "name": "Tom"
+      },
+      {
+        "name": "Mallory"
+      }
+    ],
+    "_path_": [
+      {
+        "uid": "0x2",
+        "friend": [
+          {
+            "uid": "0x3",
+            "friend|weight": 0.1,
+            "friend": [
+              {
+                "uid": "0x4",
+                "friend|weight": 0.2,
+                "friend": [
+                  {
+                    "uid": "0x5",
+                    "friend|weight": 0.3
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+
+```
+
+可以将约束应用于中间节点。
+```
+curl -H "Content-Type: application/graphql+-" localhost:8080/query -XPOST -d $'{
+  path as shortest(from: 0x2, to: 0x5) {
+    friend @filter(not eq(name, "Bob")) @facets(weight)
+    relative @facets(liking)
+  }
+
+  relationship(func: uid(path)) {
+    name
+  }
+}' | python -m json.tool | less
+
+```
+
+第k个最短路径算法（在numpaths> 1时使用）也接受参数minweight和maxweight，它们float类型的值。通过它们时，只有权重范围[minweight，maxweight]内的路径才被视为有效路径。例如，可用于查询在2到4个节点之间穿越的最短路径。
+```
+curl -H "Content-Type: application/graphql+-" localhost:8080/query -XPOST -d $'{
+ path as shortest(from: 0x2, to: 0x5, numpaths: 2, minweight: 2, maxweight: 4) {
+  friend
+ }
+ path(func: uid(path)) {
+   name
+ }
+}' | python -m json.tool | less
+
+```
+最短路径查询需要牢记以下几点：
+
+ - 权重必须为非负数。 Dijkstra的算法用于计算最短路径。
+ - 最短路径查询块中每个谓词仅允许一个构面。
+ - 每个查询只允许一个最短路径块。 结果中仅返回一个_path_。 对于numpaths> 1的查询，_path_包含所有路径。
+ - k最短路径查询的结果中不包括循环路径。
+ - 对于k最短路径（当numpaths> 1时），最短路径查询变量的结果将仅返回单个路径，这将是k个路径中的最短路径。 所有k条路径都在_path_中返回。
+  
+### 递归查询
+递归查询使您可以遍历一组谓词（使用过滤器，构面等），直到到达所有叶节点或达到depth参数指定的最大深度。
+
+要从拥有所有超过30000部电影的流派中获得10部电影，然后为这些电影获得两名演员，我们可以执行以下操作：
+```
+{
+	me(func: gt(count(~genre), 30000), first: 1) @recurse(depth: 5, loop: true) {
+		name@en
+		~genre (first:10) @filter(gt(count(starring), 2))
+		starring (first: 2)
+		performance.actor
+	}
+}
+```
+响应
+```
+{
+  "data": {
+    "me": [
+      {
+        "name@en": "Documentary film",
+        "~genre": [
+          {
+            "name@en": "Casting Crowns: The Altar and the Door Live",
+            "starring": [
+              {
+                "performance.actor": [
+                  {
+                    "name@en": "Megan Garrett"
+                  }
+                ]
+              },
+              {
+                "performance.actor": [
+                  {
+                    "name@en": "Chris Huffman"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+使用递归查询时要记住的几点是：
+ - 您只能在root之后指定一级谓词。 这些将被递归遍历。 标量节点和实体节点都被类似地对待。
+ - 每个查询只建议用一个递归块。
+ - 要小心，因为结果大小可能会迅速爆炸，如果结果集太大，则会返回错误。 在这种情况下，请使用更多的过滤器，使用分页来限制结果，或者在根提供深度参数，如上面的示例所示。
+ - 可以将loop参数设置为false，在这种情况下，遍历时将忽略导致循环的路径。
+ - 如果未指定，则loop参数的值默认为false。
+ - 如果loop参数的值为false且未指定depth，则depth将默认为math.MaxUint64，这意味着可以遍历整个图形，直到到达所有叶节点为止。
+
+### 碎片
+fragment关键字允许您根据GraphQL规范定义可在查询中引用的新片段。 关键是，如果有多个部分查询同一组字段，则可以定义一个片段并多次引用它。 片段可以嵌套在片段内部，但不允许循环。 这是一个相应的例子。
+
+```
+curl -H "Content-Type: application/graphql+-" localhost:8080/query -XPOST -d $'
+query {
+  debug(func: uid(1)) {
+    name@en
+    ...TestFrag
+  }
+}
+fragment TestFrag {
+  initial_release_date
+  ...TestFragB
+}
+fragment TestFragB {
+  country
+}' | python -m json.tool | less
+```
+### GraphQL 变量
+变量可以在查询中定义和使用，这有助于查询重用，并通过传递单独的变量映射来避免在运行时客户端中昂贵的字符串构建。 变量以$符号开头。 对于带有GraphQL变量的HTTP请求，我们必须使用Content-Type: application/json 标头，并通过包含查询和变量的JSON对象传递数据。
+```
+curl -H "Content-Type: application/json" localhost:8080/query -XPOST -d $'{
+  "query": "query test($a: string) { test(func: eq(name, $a)) { \n uid \n name \n } }",
+  "variables": { "$a": "Alice" }
+}' | python -m json.tool | less
+```
+查询
+```
+query test($a: int, $b: int, $name: string) {
+  me(func: allofterms(name@en, $name)) {
+    name@en
+    director.film (first: $a, offset: $b) {
+      name @en
+      genre(first: $a) {
+        name@en
+      }
+    }
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "me": [
+      {
+        "name@en": "Steven Spielberg",
+        "director.film": [
+          {
+            "name@en": "Close Encounters of the Third Kind",
+            "genre": [
+              {
+                "name@en": "Science Fiction"
+              },
+              {
+                "name@en": "Adventure Film"
+              },
+              {
+                "name@en": "Drama"
+              }
+            ]
+          },
+          {
+            "name@en": "War of the Worlds",
+            "genre": [
+              {
+                "name@en": "Horror"
+              },
+              {
+                "name@en": "Science Fiction"
+              },
+              {
+                "name@en": "Thriller"
+              },
+              {
+                "name@en": "Alien Film"
+              },
+              {
+                "name@en": "Adventure Film"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+ - 变量可以具有默认值。 在下面的示例中，$a的默认值为2。由于变量映射中未提供$a的值，因此$a将采用默认值。
+ - 类型后缀有！的变量, 不能具有默认值，必须具有一个值作为变量映射的一部分。
+ - 变量的值必须可解析为给定的类型，否则，将引发错误。
+ - 截至目前，支持的变量类型为：int，float，bool和string。
+ - 必须在开头的命名查询子句中声明正在使用的任何变量。
+
+查询
+```
+query test($a: int = 2, $b: int!, $name: string) {
+  me(func: allofterms(name@en, $name)) {
+    director.film (first: $a, offset: $b) {
+      genre(first: $a) {
+        name@en
+      }
+    }
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "me": [
+      {
+        "director.film": [
+          {
+            "genre": [
+              {
+                "name@en": "Science Fiction"
+              },
+              {
+                "name@en": "Adventure Film"
+              }
+            ]
+          },
+          {
+            "genre": [
+              {
+                "name@en": "Horror"
+              },
+              {
+                "name@en": "Science Fiction"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+也可以在变量中使用数
+```
+query test($a: int = 2, $b: int!, $aName: string, $bName: string) {
+  me(func: eq(name@en, [$aName, $bName])) {
+    director.film (first: $a, offset: $b) {
+      genre(first: $a) {
+        name@en
+      }
+    }
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "me": [
+      {
+        "director.film": [
+          {
+            "genre": [
+              {
+                "name@en": "Indie film"
+              },
+              {
+                "name@en": "Thriller"
+              }
+            ]
+          },
+          {
+            "genre": [
+              {
+                "name@en": "Farce"
+              },
+              {
+                "name@en": "Comedy"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "director.film": [
+          {
+            "genre": [
+              {
+                "name@en": "Science Fiction"
+              },
+              {
+                "name@en": "Adventure Film"
+              }
+            ]
+          },
+          {
+            "genre": [
+              {
+                "name@en": "Horror"
+              },
+              {
+                "name@en": "Science Fiction"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+同样变量替换也可以用在构面中
+```
+query test($name: string = "Alice") {
+  data(func: eq(name, $name)) {
+    friend @facets(eq(close, true)) {
+      name
+    }
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "data": [
+      {
+        "friend": [
+          {
+            "name": "Bob"
+          },
+          {
+            "name": "Dave"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+```
+注意， 如果你想输入一串uid做为GraphQL的变量， 你可以把它们当成字符串然后用[]围起来，如是 ["13", "14"]
+```
+
+
+    
