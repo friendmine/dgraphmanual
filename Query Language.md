@@ -3700,3 +3700,1355 @@ veterinarian
 
 请注意，扩展功能当前不支持其他类型的过滤器和指令。过滤器需要对允许使用的过滤器使用类型函数。允许逻辑AND和OR运算。例如，expand(_all_) @filter(type(Person) OR type(Animal)) ，将仅扩展指向任一类型节点的边。
 
+### 级联指令
+使用@cascade指令，所有不符合指定所有谓词的节点会在结果中删除。 在应用某些过滤器或节点可能没有列出所有谓词的情况下，这很有用。
+
+查询示例：哈利·波特电影，每个演员和扮演的角色。 使用@cascade时，将删除Warwick这个演员扮演的角色以外的所有角色k。 如果没有@cascade，将返回每个角色及相应的演员。
+
+查询
+```
+{
+  HP(func: allofterms(name@en, "Harry Potter")) @cascade {
+    name@en
+    starring{
+        performance.character {
+          name@en
+        }
+        performance.actor @filter(allofterms(name@en, "Warwick")){
+            name@en
+         }
+    }
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "HP": [
+      {
+        "name@en": "Harry Potter and the Chamber of Secrets",
+        "starring": [
+          {
+            "performance.character": [
+              {
+                "name@en": "Professor Filius Flitwick"
+              }
+            ],
+            "performance.actor": [
+              {
+                "name@en": "Warwick Davis"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name@en": "Harry Potter and the Deathly Hallows - Part I",
+        "starring": [
+          {
+            "performance.character": [
+              {
+                "name@en": "Griphook"
+              }
+            ],
+            "performance.actor": [
+              {
+                "name@en": "Warwick Davis"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name@en": "Harry Potter and the Deathly Hallows – Part 2",
+        "starring": [
+          {
+            "performance.character": [
+              {
+                "name@en": "Professor Filius Flitwick"
+              }
+            ],
+            "performance.actor": [
+              {
+                "name@en": "Warwick Davis"
+              }
+            ]
+          },
+          {
+            "performance.character": [
+              {
+                "name@en": "Griphook"
+              }
+            ],
+            "performance.actor": [
+              {
+                "name@en": "Warwick Davis"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name@en": "Harry Potter and the Prisoner of Azkaban",
+        "starring": [
+          {
+            "performance.character": [
+              {
+                "name@en": "Professor Filius Flitwick"
+              }
+            ],
+            "performance.actor": [
+              {
+                "name@en": "Warwick Davis"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name@en": "Harry Potter and the Order of the Phoenix",
+        "starring": [
+          {
+            "performance.character": [
+              {
+                "name@en": "Professor Filius Flitwick"
+              }
+            ],
+            "performance.actor": [
+              {
+                "name@en": "Warwick Davis"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name@en": "Harry Potter and the Goblet of Fire",
+        "starring": [
+          {
+            "performance.character": [
+              {
+                "name@en": "Professor Filius Flitwick"
+              }
+            ],
+            "performance.actor": [
+              {
+                "name@en": "Warwick Davis"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name@en": "Harry Potter and the Half-Blood Prince",
+        "starring": [
+          {
+            "performance.character": [
+              {
+                "name@en": "Professor Filius Flitwick"
+              }
+            ],
+            "performance.actor": [
+              {
+                "name@en": "Warwick Davis"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name@en": "Harry Potter and the Philosopher's Stone",
+        "starring": [
+          {
+            "performance.character": [
+              {
+                "name@en": "Goblin Bank Teller"
+              }
+            ],
+            "performance.actor": [
+              {
+                "name@en": "Warwick Davis"
+              }
+            ]
+          },
+          {
+            "performance.character": [
+              {
+                "name@en": "Professor Filius Flitwick"
+              }
+            ],
+            "performance.actor": [
+              {
+                "name@en": "Warwick Davis"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+您也可以将@cascade应用于内部查询块。
+查询
+```
+{
+  HP(func: allofterms(name@en, "Harry Potter")) {
+    name@en
+    genre {
+      name@en
+    }
+    starring @cascade {
+        performance.character {
+          name@en
+        }
+        performance.actor @filter(allofterms(name@en, "Warwick")){
+            name@en
+         }
+    }
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "HP": [
+      {
+        "name@en": "Harry Potter and the Chamber of Secrets",
+        "genre": [
+          {
+            "name@en": "Family"
+          },
+          {
+            "name@en": "Adventure Film"
+          },
+          {
+            "name@en": "Fantasy"
+          },
+          {
+            "name@en": "Mystery"
+          }
+        ],
+        "starring": [
+          {
+            "performance.character": [
+              {
+                "name@en": "Professor Filius Flitwick"
+              }
+            ],
+            "performance.actor": [
+              {
+                "name@en": "Warwick Davis"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name@en": "Harry Potter and the Deathly Hallows - Part I",
+        "genre": [
+          {
+            "name@en": "Fiction"
+          },
+          {
+            "name@en": "Family"
+          },
+          {
+            "name@en": "Adventure Film"
+          },
+          {
+            "name@en": "Drama"
+          },
+          {
+            "name@en": "Fantasy"
+          },
+          {
+            "name@en": "Action Film"
+          },
+          {
+            "name@en": "Mystery"
+          }
+        ],
+        "starring": [
+          {
+            "performance.character": [
+              {
+                "name@en": "Griphook"
+              }
+            ],
+            "performance.actor": [
+              {
+                "name@en": "Warwick Davis"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name@en": "Harry Potter and the Deathly Hallows – Part 2",
+        "genre": [
+          {
+            "name@en": "Fiction"
+          },
+          {
+            "name@en": "Adventure Film"
+          },
+          {
+            "name@en": "Drama"
+          },
+          {
+            "name@en": "Fantasy"
+          },
+          {
+            "name@en": "Mystery"
+          }
+        ],
+        "starring": [
+          {
+            "performance.character": [
+              {
+                "name@en": "Professor Filius Flitwick"
+              }
+            ],
+            "performance.actor": [
+              {
+                "name@en": "Warwick Davis"
+              }
+            ]
+          },
+          {
+            "performance.character": [
+              {
+                "name@en": "Griphook"
+              }
+            ],
+            "performance.actor": [
+              {
+                "name@en": "Warwick Davis"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name@en": "Harry Potter and the Prisoner of Azkaban",
+        "genre": [
+          {
+            "name@en": "Fiction"
+          },
+          {
+            "name@en": "Family"
+          },
+          {
+            "name@en": "Adventure Film"
+          },
+          {
+            "name@en": "Mystery"
+          }
+        ],
+        "starring": [
+          {
+            "performance.character": [
+              {
+                "name@en": "Professor Filius Flitwick"
+              }
+            ],
+            "performance.actor": [
+              {
+                "name@en": "Warwick Davis"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name@en": "I Am Harry Potter",
+        "genre": [
+          {
+            "name@en": "Comedy"
+          },
+          {
+            "name@en": "Short Film"
+          }
+        ]
+      },
+      {
+        "name@en": "Harry Potter and the Order of the Phoenix",
+        "genre": [
+          {
+            "name@en": "Fiction"
+          },
+          {
+            "name@en": "Family"
+          },
+          {
+            "name@en": "Adventure Film"
+          },
+          {
+            "name@en": "Fantasy"
+          },
+          {
+            "name@en": "Mystery"
+          },
+          {
+            "name@en": "Fantasy Adventure"
+          }
+        ],
+        "starring": [
+          {
+            "performance.character": [
+              {
+                "name@en": "Professor Filius Flitwick"
+              }
+            ],
+            "performance.actor": [
+              {
+                "name@en": "Warwick Davis"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name@en": "Harry Potter and the Goblet of Fire",
+        "genre": [
+          {
+            "name@en": "Fiction"
+          },
+          {
+            "name@en": "Science Fiction"
+          },
+          {
+            "name@en": "Thriller"
+          },
+          {
+            "name@en": "Family"
+          },
+          {
+            "name@en": "Children's Fantasy"
+          },
+          {
+            "name@en": "Adventure Film"
+          },
+          {
+            "name@en": "Fantasy"
+          },
+          {
+            "name@en": "Supernatural"
+          },
+          {
+            "name@en": "Children's/Family"
+          },
+          {
+            "name@en": "Mystery"
+          },
+          {
+            "name@en": "Fantasy Adventure"
+          }
+        ],
+        "starring": [
+          {
+            "performance.character": [
+              {
+                "name@en": "Professor Filius Flitwick"
+              }
+            ],
+            "performance.actor": [
+              {
+                "name@en": "Warwick Davis"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name@en": "Harry Potter and the Half-Blood Prince",
+        "genre": [
+          {
+            "name@en": "Fiction"
+          },
+          {
+            "name@en": "Family"
+          },
+          {
+            "name@en": "Children's Fantasy"
+          },
+          {
+            "name@en": "Adventure Film"
+          },
+          {
+            "name@en": "Romance Film"
+          },
+          {
+            "name@en": "Fantasy"
+          },
+          {
+            "name@en": "Action Film"
+          },
+          {
+            "name@en": "Children's/Family"
+          },
+          {
+            "name@en": "Mystery"
+          },
+          {
+            "name@en": "Fantasy Adventure"
+          }
+        ],
+        "starring": [
+          {
+            "performance.character": [
+              {
+                "name@en": "Professor Filius Flitwick"
+              }
+            ],
+            "performance.actor": [
+              {
+                "name@en": "Warwick Davis"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name@en": "How Aleš Met Harry Potter",
+        "genre": [
+          {
+            "name@en": "Animation"
+          },
+          {
+            "name@en": "Short Film"
+          }
+        ]
+      },
+      {
+        "name@en": "Harry Potter"
+      },
+      {
+        "name@en": "Harry Potter and the Forbidden Journey",
+        "genre": [
+          {
+            "name@en": "Adventure Film"
+          },
+          {
+            "name@en": "Short Film"
+          }
+        ]
+      },
+      {
+        "name@en": "Harry Potter and the Philosopher's Stone",
+        "genre": [
+          {
+            "name@en": "Fiction"
+          },
+          {
+            "name@en": "Family"
+          },
+          {
+            "name@en": "Adventure Film"
+          }
+        ],
+        "starring": [
+          {
+            "performance.character": [
+              {
+                "name@en": "Goblin Bank Teller"
+              }
+            ],
+            "performance.actor": [
+              {
+                "name@en": "Warwick Davis"
+              }
+            ]
+          },
+          {
+            "performance.character": [
+              {
+                "name@en": "Professor Filius Flitwick"
+              }
+            ],
+            "performance.actor": [
+              {
+                "name@en": "Warwick Davis"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name@en": "'Harry Potter': Behind the Magic",
+        "genre": [
+          {
+            "name@en": "Documentary film"
+          },
+          {
+            "name@en": "Television film"
+          }
+        ]
+      },
+      {
+        "name@en": "50 Greatest Harry Potter Moments",
+        "genre": [
+          {
+            "name@en": "Documentary film"
+          }
+        ]
+      },
+      {
+        "name@en": "The Seeker's Guide to Harry Potter",
+        "genre": [
+          {
+            "name@en": "Documentary film"
+          }
+        ]
+      },
+      {
+        "name@en": "Harry Potter"
+      },
+      {
+        "name@en": "Harry Potter and the Secret Chamberpot of Azerbaijan",
+        "genre": [
+          {
+            "name@en": "Short Film"
+          }
+        ]
+      },
+      {
+        "name@en": "Harry Potter Interactive DVD Game: Hogwarts Challenge",
+        "genre": [
+          {
+            "name@en": "Family"
+          },
+          {
+            "name@en": "Hobbies and interests"
+          }
+        ]
+      },
+      {
+        "name@en": "Harry Potter Jr."
+      },
+      {
+        "name@en": "Harry Potter Sr."
+      },
+      {
+        "name@en": "Inside 'Harry Potter and the Goblet of Fire'",
+        "genre": [
+          {
+            "name@en": "Documentary film"
+          },
+          {
+            "name@en": "Television film"
+          }
+        ]
+      },
+      {
+        "name@en": "Henry Harry Potter Otieno"
+      },
+      {
+        "name@en": "Harry Potter"
+      },
+      {
+        "name@en": "Harry Potter at the Castle: Magic at Midnight",
+        "genre": [
+          {
+            "name@en": "Documentary film"
+          },
+          {
+            "name@en": "Television film"
+          }
+        ]
+      },
+      {
+        "name@en": "Creating the World of Harry Potter, Part 4: Sound and Music",
+        "genre": [
+          {
+            "name@en": "Documentary film"
+          }
+        ]
+      },
+      {
+        "name@en": "J.K. Rowling and the Birth of Harry Potter",
+        "genre": [
+          {
+            "name@en": "Documentary film"
+          }
+        ]
+      },
+      {
+        "name@en": "The Harry Potter Kids",
+        "genre": [
+          {
+            "name@en": "Documentary film"
+          }
+        ]
+      },
+      {
+        "name@en": "Discovering the Real World of Harry Potter",
+        "genre": [
+          {
+            "name@en": "Family"
+          },
+          {
+            "name@en": "Documentary film"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### 正则指令
+使用@normalize指令，仅返回别名谓词，并且将其结果展平以除去嵌套。
+
+查询示例：每部史蒂文·斯皮尔伯格电影的电影名称，国家/地区和前两个演员（按UID顺序），没有initial_release_date，因为没有使用@normalize给出别名并将其拼合
+
+查询
+```
+{
+  director(func:allofterms(name@en, "steven spielberg")) @normalize {
+    director: name@en
+    director.film {
+      film: name@en
+      initial_release_date
+      starring(first: 2) {
+        performance.actor {
+          actor: name@en
+        }
+        performance.character {
+          character: name@en
+        }
+      }
+      country {
+        country: name@en
+      }
+    }
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "director": [
+      {
+        "actor": "John Michael",
+        "character": "Doctor",
+        "country": "United States of America",
+        "director": "Steven Spielberg",
+        "film": "Hook"
+      },
+      {
+        "actor": "Brad Parker",
+        "character": "Jim",
+        "country": "United States of America",
+        "director": "Steven Spielberg",
+        "film": "Hook"
+      },
+      {
+        "actor": "Carl Anderson",
+        "country": "United States of America",
+        "director": "Steven Spielberg",
+        "film": "The Color Purple"
+      }
+    ]
+  }
+}
+```
+
+您还可以将@normalize应用于嵌套查询块。功能是一样的，但仅会去除所在嵌套查询块的结果的嵌套。 @normalize将返回一个列表，而与应用该属性的类型无关。
+```
+{
+  director(func:allofterms(name@en, "steven spielberg")) {
+    director: name@en
+    director.film {
+      film: name@en
+      initial_release_date
+      starring(first: 2) @normalize {
+        performance.actor {
+          actor: name@en
+        }
+        performance.character {
+          character: name@en
+        }
+      }
+      country {
+        country: name@en
+      }
+    }
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "director": [
+      {
+        "director": "Steven Spielberg",
+        "director.film": [
+          {
+            "film": "Hook",
+            "initial_release_date": "1991-12-08T00:00:00Z",
+            "starring": [
+              {
+                "actor": "John Michael",
+                "character": "Doctor"
+              },
+              {
+                "actor": "Brad Parker",
+                "character": "Jim"
+              }
+            ],
+            "country": [
+              {
+                "country": "United States of America"
+              }
+            ]
+          },
+          {
+            "film": "The Color Purple",
+            "initial_release_date": "1985-12-16T00:00:00Z",
+            "starring": [
+              {
+                "actor": "Carl Anderson"
+              },
+              {
+                "actor": "Oprah Winfrey",
+                "character": "Sofia"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### IgnoreReflex指令
+@ignorereflex指令会强制删除通过查询结果中的任何路径从自身出发再返回的结点路径
+
+查询示例：Rutger Hauer的所有共同角色。 如果没有@ignorereflex，则每部电影的结果还将包括Rutger Hauer。
+```
+{
+  coactors(func: eq(name@en, "Rutger Hauer")) @ignorereflex {
+    actor.film {
+      performance.film {
+        starring {
+          performance.actor {
+            name@en
+          }
+        }
+      }
+    }
+  }
+}
+```
+响应
+```
+{
+  "data": {
+    "coactors": [
+      {
+        "actor.film": [
+          {
+            "performance.film": [
+              {
+                "starring": [
+                  {
+                    "performance.actor": [
+                      {
+                        "name@en": "John de Lancie"
+                      }
+                    ]
+                  },
+                  {
+                    "performance.actor": [
+                      {
+                        "name@en": "Michael Weston"
+                      }
+                    ]
+                  },
+                  {
+                    "performance.actor": [
+                      {
+                        "name@en": "Meiling Melançon"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Debug调试
+为了调试，您可以将查询参数debug=true附加到查询中。 通过附加此参数，您可以检索所有实体的uid属性以及返回响应的扩展下的server_latency和start_ts信息。
+
+ - parsing_ns：解析查询的延迟（以纳秒为单位）。
+ - processing_ns：处理查询的延迟（以纳秒为单位）。
+ - encoding_ns：编码Jaons的延迟（以纳秒为单位）。
+ - start_ts：事务的逻辑开始时间戳。
+使用调试作为查询参数进行查询
+```
+curl -H "Content-Type: application/graphql+-" http://localhost:8080/query?debug=true -XPOST -d $'{
+  tbl(func: allofterms(name@en, "The Big Lebowski")) {
+    name@en
+  }
+}' | python -m json.tool | less
+```
+返回的uid与 server_latency
+```
+{
+  "data": {
+    "tbl": [
+      {
+        "uid": "0x41434",
+        "name@en": "The Big Lebowski"
+      },
+      {
+        "uid": "0x145834",
+        "name@en": "The Big Lebowski 2"
+      },
+      {
+        "uid": "0x2c8a40",
+        "name@en": "Jeffrey \"The Big\" Lebowski"
+      },
+      {
+        "uid": "0x3454c4",
+        "name@en": "The Big Lebowski"
+      }
+    ],
+    "extensions": {
+      "server_latency": {
+        "parsing_ns": 18559,
+        "processing_ns": 802990982,
+        "encoding_ns": 1177565
+      },
+      "txn": {
+        "start_ts": 40010
+      }
+    }
+  }
+}
+
+```
+### 架构Schema
+对于每个谓词，架构都会指定目标的类型。如果谓词p具有类型T，则对于所有主谓谓对象三元组s p o，对象o的类型为T。
+
+ - 在突变中，如果无法将值转换为架构设定好的类型，则会引发标量类型错误。
+
+ - 查询时，会根据谓词的架构类型返回值结果。
+
+如果在突变操作前，没有为谓词添加三元组的指定架构类型，就会可以从第一个突变中推断出该类型。此类型为：
+
+ - 如果谓词的第一个突变操作具有主语​​和宾语的节点，就是uid类型，或者
+
+ - 从RDF类型派生的，如果对象是文字，并且在第一个突变中存在RDF类型，或者
+
+ - 默认类型。
+
+### 模式类型
+Dgraph支持标量类型和UID类型。
+
+#### 标量类型
+对于所有具有标量类型谓词的三元组，对象都是文字。
+
+|Dgraph类型|Go类型|
+|--|--|
+|default|	string|
+|int|	int64|
+|float|	float|
+|string	|string|
+|bool|	bool|
+|dateTime	|time.Time (RFC3339 format [Optional timezone] eg: 2006-01-02T15:04:05.999999999+10:00 or 2006-01-02T15:04:05.999999999)|
+|geo	|go-geom|
+|password	|string (encrypted)|
+```
+注意Dgraph仅与RFC 3339支持dateTime标量类型的日期和时间格式兼容， 但与ISO 8601（RDF规范中定义。您应该先将值转换为RFC 3339格式，然后再将其发送到Dgraph。
+```
+### UID类型
+uid类型表示节点-节点边；在内部，每个节点都表示为一个uint64 id。
+
+|Dgraph类型|Go类型|
+|--|--|
+|uid| uint64|
+
+### 添加或修改架构
+突变操作可添加或修改架构。
+
+通过将模式指定为列表类型，可以为S P添加多个标量值。以下示例中可以存储每个S P的字符串列表。
+通过使用@index加上参数，可以指定索引。在为谓词指定索引时，必须指定索引的类型。例如：
+
+```
+name: string @index(exact, fulltext) @count .
+multiname: string @lang .
+age: int @index(int) .
+friend: [uid] @count .
+dob: dateTime .
+location: geo @index(geo) .
+occupations: [string] @index(term) .
+```
+
+如果尚未为谓词存储任何数据，则架构突变操作将设置一个空的架构，以准备接收三元组。
+
+如果在突变之前已经存储了数据，则不会检查现有值是否符合新架构。在查询时，Dgraph会尝试将现有值转换为新的架构类型，而忽略任何失败的转换。
+
+如果存在数据并且在架构突变中指定了新索引，则将删除不在更新列表中的任何索引，并为每个指定的新标记器创建一个新索引。
+
+架构突变操作，也会计算反向边。
+```
+请注意，您无法定义以dgraph开头的谓词名称。它作为Dgraph内部类型/谓词的命名空间被保留了。例如，将dgraph.name定义为谓词是无效的。
+```
+### 后台索引
+具体取决于数据的大小，索引可能需要很长时间才能计算出来。从Dgraph 20.03.0版开始，可以在后台计算索引，因此在变更操作返回后，索引可能仍在运行。这要求您在运行需要新创建索引的查询之前，等待索引完成。否则这样的查询将失败，并显示一条错误消息，通知您给定的谓词未建立索引或没有反向边。
+
+“schema is already being modified. Please retry. ”如果已经在进行中错误模式上进行修改，也会有错的。虽然，可以在索引建立中成功进行突变操作。
+
+例如，假设我们使用以下架构执行变更操作：
+
+```
+name: string @index(fulltext, term) .
+age: int @index(int) @upsert .
+friend: [uid] @count @reverse .
+```
+一旦Alter操作返回，Dgraph将报告以下架构并启动后台任务以计算所有新索引：
+
+```
+name: string .
+age: int @upsert .
+friend: [uid] .
+```
+完成索引的计算后，Dgraph将开始报告架构中的索引。在多节点群集中，alpha可能会在不同时间完成索引的计算。在这种情况下，Alpha可能会返回不同的架构，直到在所有Alpha上完成所有索引的计算为止。
+
+如果在计算索引时发生意外错误，则后台索引任务可能会失败。您应该重试Alter操作以更新架构，或在所有Alpha上同步架构。
+
+我们还计划尽快添加一个更简单的API，以检查后台索引计算的状态。有关更多详细信息，请参见此[PR](https://github.com/dgraph-io/dgraph/pull/4961)。
+
+### HTTP API
+您可以将标志runInBackground指定为true以便在后台运行索引计算。
+
+```
+curl localhost:8080/alter?runInBackground=true -XPOST -d $'
+    name: string @index(fulltext, term) .
+    age: int @index(int) @upsert .
+    friend: [uid] @count @reverse .
+' | python -m json.tool | less
+
+```
+
+### Grpc API
+您可以在变更操作前，将api.Operation的RunInBackground字段设置为true, 也可以达到同样的效果。
+```
+op := &api.Operation{}
+op.Schema = `
+  name: string @index(fulltext, term) .
+  age: int @index(int) @upsert .
+  friend: [uid] @count @reverse .
+`
+op.RunInBackground = true
+err = dg.Alter(context.Background(), op)
+```
+
+### 谓词名称规则
+谓词名称的任何字母数字组合都是允许的。 Dgraph还支持[国际化资源标识符](https://en.wikipedia.org/wiki/Internationalized_Resource_Identifier)（IRI）。您可以在谓词i18n中阅读更多内容。
+
+### 允许的特殊字符
+不接受单个特殊字符，其中也包括单个IRI的特殊字符。必须使用字母数字字符作为前缀/后缀。
+```
+] [＆*（）_- + =！＃$％
+```
+```
+注意：不限制使用@后缀，但是后缀字符将被忽略。
+```
+
+### 禁止的特殊字符
+不接受以下特殊字符。
+```
+^} | {`\〜
+```
+
+### 谓词的i18n
+如果您的谓词是URI或具有特定于语言的字符，则在执行模式突变时要将其括在尖括号<>中。
+
+注意Dgraph支持国际化资源标识符（IRI），用于谓词名称和值。
+模式语法：
+
+```
+<职业>: string @index(exact) .
+<年龄>: int @index(int) .
+<地点>: geo @index(geo) .
+<公司>: string .
+```
+此语法允许使用国际化的谓词名称，但全文索引仍默认为英语。要为您的语言使用正确的分词器，您需要使用@lang指令并使用language标签输入值。
+
+架构：
+```
+<公司>：字符串@index（全文）@lang。
+```
+突变操作：
+```
+{
+  set {
+    _:a <公司> "Dgraph Labs Inc"@en .
+    _:b <公司> "夏新科技有限责任公司"@zh .
+    _:a <dgraph.type> "Company" .
+  }
+}
+```
+查询：
+```
+{
+  q(func: alloftext(<公司>@zh, "夏新科技有限责任公司")) {
+    uid
+    <公司>@.
+  }
+}
+```
+
+### Upsert指令
+要对谓词使用upsert操作，请在架构中指定@upsert指令。当使用@upsert指令提交涉及谓词的事务时，Dgraph将检查索引键是否存在冲突，从而有助于在运行并发upsert时强制执行唯一性约束。
+
+这是您为谓词指定upsert指令的方式。
+
+```
+email: string @index(exact) @upsert .
+```
+
+### 无冲突指令
+NoConflict指令可防止在谓词级别检测冲突。这是一项实验性功能，而不是建议使用的指令，但它的存在是为了避免对正确性要求不高的谓词产生冲突。这可能会导致数据丢失，尤其是当用于具有计数索引的谓词时。
+
+这是您为谓词指定@noconflict指令的方式。
+
+```
+email: string @index(exact) @noconflict .
+```
+### RDF类型
+Dgraph支持多种[RDF类型](https://dgraph.io/docs/mutations/language-rdf-types/)的突变操作。
+
+除了暗示第一个突变的模式类型之外，RDF类型还可以覆盖针对存储的模式类型。
+
+如果谓词具有模式类型，而突变具有带有不同基础Dgraph类型的RDF类型，就会检查模式类型的可转换性，如果它们不兼容，会引发错误；但是值存储在RDF类型的对应Dgraph中类型。查询结果始终以架构类型返回。
+
+例如，如果没有为年龄谓词设置任何模式。来个突变操作
+
+```
+{
+ set {
+  _:a <age> "15"^^<xs:int> .
+  _:b <age> "13" .
+  _:c <age> "14"^^<xs:string> .
+  _:d <age> "14.5"^^<xs:string> .
+  _:e <age> "14.5" .
+ }
+}
+```
+Dgraph：
+
+ - 将模式类型设置为int（如第一个三元组所暗示），
+ - 将“13”转换为int存储空间，
+ - 检查到“14”可以转换为int，但存储为字符串，
+ - 其余两个三元组会引发错误，因为“ 14.5”无法转换为int。
+
+### 扩展类型
+也可以接受以下类型。
+
+#### 密码类型
+通过将属性的架构设置为password类型来设置实体的密码类型。密码不能直接查询，只能使用checkpwd功能检查是否匹配。密码使用[bcrypt](https://en.wikipedia.org/wiki/Bcrypt)加密。
+
+例如：要设置密码，请先设置架构，然后再设置密码：
+```
+pass: password .
+```
+```
+{
+  set {
+    <0x123> <name> "Password Example" .
+    <0x123> <pass> "ThePassword" .
+  }
+}
+```
+检查密码：
+```
+{
+  check(func: uid(0x123)) {
+    name
+    checkpwd(pass, "ThePassword")
+  }
+}
+```
+输出：
+```
+{
+  "data": {
+    "check": [
+      {
+        "name": "Password Example",
+        "checkpwd(pass)": true
+      }
+    ]
+  }
+}
+```
+您也可以使用别名和密码类型。
+```
+{
+  check(func: uid(0x123)) {
+    name
+    secret: checkpwd(pass, "ThePassword")
+  }
+}
+```
+输出：
+```
+{
+  "data": {
+    "check": [
+      {
+        "name": "Password Example",
+        "secret": true
+      }
+    ]
+  }
+}
+```
+### 索引
+```
+注意通过应用函数对谓词进行过滤一定需要一个索引。
+```
+通过应用函数进行过滤时，Dgraph使用索引可以有效地搜索潜在的大型数据集。
+
+所有标量类型都可以索引。
+
+类型int，float，bool和geo的每个索引都只有一个默认索引：使用名为int，float，bool和geo的标记生成器。
+
+类型string和dateTime有许多索引。
+
+### 字符串索引
+字符串可用的索引如下。
+
+|Dgraph函数|必需的索引/令牌生成器|注意|
+|--|--|--|
+|eq|hash, exact, term, fulltext| eq的最佳性能索引是哈希。仅在还需要术语或全文搜索时才使用术语或全文。如果您已经在使用术语，则也无需使用hash或exact。|
+|le，ge，lt，gt|exact|允许更快的排序。|
+|allofterms，anyofterms|term|允许按句子中的术语进行搜索。|
+|alloftext，anyoftext|fulltext|与特定语言的词干和停用词匹配。|
+|regexp| trigram|正则表达式匹配。也可以用于相等性检查。|
+```
+警告 错误的索引选择可能会导致性能下降和事务冲突率增加尽量使用应用程序需要的最少数量和最简单的索引。
+```
+### 日期时间指标
+dateTime可用的索引如下。
+
+|索引名称/令牌生成器|部分日期索引|
+|--|--|
+|year|年份的年度索引（默认）|
+|month|年月索引|
+|day|年，月和日日索引
+|hour|年，月，日和小时索引|
+
+dateTime索引的选择允许选择索引的精度。要求搜索日期但精度在年的应用程序（例如这些文档中的电影示例）可能更喜欢year令牌生成器；依赖细粒度日期搜索的应用程序（例如实时传感器读数）可能更喜欢小时索引。
+
+所有的dateTime索引都是可排序的。
+
+### 可排序索引
+并非所有索引都在它们索引的值之间建立总的顺序。可排序索引允许不等式函数和排序。
+
+ - 索引int和float是可排序的。
+ - 字符串索引exact可排序。
+ - 所有dateTime索引都是可排序的。
+例如，给定边类型的字符串name，要按名称排序或对名称执行不等式过滤，必须指定exact的索引。在这种情况下，架构查询将至少返回以下标记器。
+```
+{
+  "predicate": "name",
+  "type": "string",
+  "index": true,
+  "tokenizer": [
+    "exact"
+  ]
+}
+```
+### 计数索引
+对于带有@count的库房， Dgraph会索引每个节点的边数。这样可以快速查询以下形式：
+
+```
+{
+  q(func: gt(count(pred), threshold)) {
+    ...
+  }
+}
+```
+### List TYpe清单类型
+如果在模式中指定，则具有标量类型的谓词也可以存储值列表。标量类型需要包含在[]中，以指示其为列表类型。这些列表就像一个无序集合。
+
+```
+occupations: [string] .
+score: [int] .
+```
+ - 设置操作将添加值到值列表中。存储值的顺序是不确定的。
+ - 删除操作将从列表中删除该值。
+ - 查询这些谓词将以数组形式返回列表。
+ - 索引可以应用于具有列表类型的谓词，并且可以在其上使用函数。
+ - 不允许使用这些谓词进行排序。
+
+### 筛选列表
+Dgraph支持基于列表的过滤。过滤的工作方式与边处理类似，并且具有相同的可用功能。
+
+例如，查询根或父边处的@filter(eq(occupations, "Teacher"))将显示数组中每个节点的列表中的所有职业，但仅包括以Teacher作为其中一个的节点职业。另外，不支持在值边上进行过滤。
+
+### 反向边
+图的边是单向的。对于节点-节点的边，有时建模需要反向的边。如果只有某些主谓谓三元组具有相反的含义，则必须手动添加这些三元组。但是，如果谓词始终具有反向，则在架构中指定@reverse后，Dgraph将直接计算反向边。
+
+一人个边anEdge的反边是〜anEdge。
+
+对于现有数据，Dgraph计算所有反向边。对于架构更改后添加的数据，Dgraph将为每个添加的三元组计算并存储反向边。
+
+### 查询架构
+架构查询能查询整个架构：
+```
+schema {}
+```
+```
+注意与常规查询不同，架构查询没有大括号包围。此外，架构查询和常规查询不能合并。
+```
+您可以在查询主体中查询特定的架构字段。
+```
+schema {
+  type
+  index
+  reverse
+  tokenizer
+  list
+  count
+  upsert
+  lang
+}
+```
+您还可以查询特定谓词：
+```
+schema(pred: [name, friend]) {
+  type
+  index
+  reverse
+  tokenizer
+  list
+  count
+  upsert
+  lang
+}
+```
+类型也可以查询。以下是一些示例查询。
+
+```
+schema(type: Movie) {}
+schema(type: [Person, Animal]) {}
+```
+请注意，类型查询在花括号之间不包含任何内容。输出将是所请求类型的完整定义。
