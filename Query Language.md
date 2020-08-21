@@ -6097,5 +6097,467 @@ query test($name: string = "Alice") {
 注意， 如果你想输入一串uid做为GraphQL的变量， 你可以把它们当成字符串然后用[]围起来，如是 ["13", "14"]
 ```
 
+### 使用自定义标记器建立索引
+Dgraph带有内置索引的大型工具包，但有时对于某些用例而言，它们并不总是足够的。
 
-    
+Dgraph允许您通过插件系统实现自定义标记生成器，以填补空白。
+
+注意事项
+插件系统使用Go的pkg/plugin.。这给插件的使用方式带来了一些限制。
+
+ - 插件必须用Go编写。
+
+ - 从Go 1.9开始，pkg/plugin.仅在Linux上有效。因此，插件仅适用于在Linux环境中部署的Dgraph实例。
+
+ - 用于编译插件的Go版本应与用于编译Dgraph本身的Go版本相同。 Dgraph始终使用最新版本的Go（您也应该使用！）。
+
+### 实现插件
+```
+注意：您应该考虑使用Go的[插件](https://golang.org/pkg/plugin/)文档来补充此处提供的文档。
+```
+插件会实现在它们自己的主包。他们必须导出特定的符号，好允许Dgraph挂接到插件。
+
+插件必须导出名为Tokenizer的符号。符号的类型必须为func() interface{}.。调用该函数时，返回的结果应该是实现以下接口的值：
+
+```
+type PluginTokenizer interface {
+    // Name is the name of the tokenizer. It should be unique among all
+    // builtin tokenizers and other custom tokenizers. It identifies the
+    // tokenizer when an index is set in the schema and when search/filter
+    // is used in queries.
+    Name() string
+
+    // Identifier is a byte that uniquely identifiers the tokenizer.
+    // Bytes in the range 0x80 to 0xff (inclusive) are reserved for
+    // custom tokenizers.
+    Identifier() byte
+
+    // Type is a string representing the type of data that is to be
+    // tokenized. This must match the schema type of the predicate
+    // being indexed. Allowable values are shown in the table below.
+    Type() string
+
+    // Tokens should implement the tokenization logic. The input is
+    // the value to be tokenized, and will always have a concrete type
+    // corresponding to Type(). The return value should be a list of
+    // the tokens generated.
+    Tokens(interface{}) ([]string, error)
+}
+```
+具体实现的Tokens(interface{})的返回类型Type()如下。
+|Type()返回类型|Tokens(interface{})的输入类型|
+|--|--|
+|"int"|	int64|
+|"float"|	float64|
+|"string"|	string|
+|"bool"|	bool|
+|"datetime"|	time.Time|
+
+### 构建插件
+必须使用插件构建模式来构建插件，以便生成.so文件而不是常规可执行文件。 例如：
+```
+go build -buildmode=plugin -o myplugin.so ~/go/src/myplugin/main.go
+
+```
+### 使用插件运行Dgraph
+启动Dgraph时，使用--custom_tokenizers标志告诉Dgraph加载哪些标记器。 它接受逗号分隔的插件列表。 例如。
+```
+dgraph ...other-args... --custom_tokenizers=plugin1.so,plugin2.so
+```
+```
+注意， 插件的正确性会在启动验证。如果有问题，Dgraph会停止初始化。
+```
+
+### 将索引添加到架构
+要使用令牌化插件，必须在架构中创建索引。
+
+这种语法与添加任何内置索引相同。 要将使用名为foo的令牌生成器插件的自定义索引添加到名为my_predicate的字符串谓词中，请在模式中使用以下内容：
+```
+my_predicate: string @index(foo) .
+```
+
+### 在查询中使用索引
+有两个可以使用自定义索引的函数：
+
+|模式|行为|
+|--|--|
+|anyof|返回与生成的任何令牌匹配的节点|
+|allof|返回与所有生成的令牌匹配的节点|
+这些函数可以在查询根结点或过滤器中使用。
+
+这里的行为类似于anyofterms/allofterms和anyoftext/alloftext。
+
+例子
+以下示例将使编写令牌化插件的过程更加具体。
+
+### Unicode字符
+本示例显示了标记化的类型，类似于全文搜索的术语标记化。文本不是分解为术语或词干，而是分解为其组成的unicode代码点（在Go术语中，这些称为符文）。
+```
+注意此令牌生成器将创建一个非常大的索引，这对于管理和存储将非常昂贵。这就是文本索引通常出现在较高级别的原因之一；用于全文搜索的词干或用于术语搜索的词条。
+```
+
+该插件的实现如下所示：
+```
+package main
+
+import "encoding/binary"
+
+func Tokenizer() interface{} { return RuneTokenizer{} }
+
+type RuneTokenizer struct{}
+
+func (RuneTokenizer) Name() string     { return "rune" }
+func (RuneTokenizer) Type() string     { return "string" }
+func (RuneTokenizer) Identifier() byte { return 0xfd }
+
+func (t RuneTokenizer) Tokens(value interface{}) ([]string, error) {
+	var toks []string
+	for _, r := range value.(string) {
+		var buf [binary.MaxVarintLen32]byte
+		n := binary.PutVarint(buf[:], int64(r))
+		tok := string(buf[:n])
+		toks = append(toks, tok)
+	}
+	return toks, nil
+}
+```
+### 提示和技巧：
+
+ - 在令牌内部，您可以假定值将具有与Type()指定的类型相对应的具体类型。 进行类型断言是安全的。
+
+ - 即使返回值为[] string，也始终可以在[字符串中存储非unicode数据](https://blog.golang.org/strings)。 有关一些有趣的背景，请参见此博客文章。Go中如何实现字符串以及为什么可以将它们用于存储非文本数据。 通过在字符串中存储任意数据，可以使索引更紧凑。 在这种情况下，varint存储在返回值中。
+
+设置索引并添加数据：
+```
+name: string @index(rune) .
+```
+```
+{
+  set{
+    _:ad <name> "Adam" .
+    _:ad <dgraph.type> "Person" .
+    _:aa <name> "Aaron" .
+    _:aa <dgraph.type> "Person" .
+    _:am <name> "Amy" .
+    _:am <dgraph.type> "Person" .
+    _:ro <name> "Ronald" .
+    _:ro <dgraph.type> "Person" .
+  }
+}
+```
+现在呢，查询可以执行了。
+只有同时 有A与n 在名字的人是Aaron。
+```
+{
+  q(func: allof(name, rune, "An")) {
+    name
+  }
+}
+=>
+{
+  "data": {
+    "q": [
+      { "name": "Aaron" }
+    ]
+  }
+}
+```
+但是，会有更多的人同时有 A和 m
+```
+{
+  q(func: allof(name, rune, "Am")) {
+    name
+  }
+}
+=>
+{
+  "data": {
+    "q": [
+      { "name": "Amy" },
+      { "name": "Adam" }
+    ]
+  }
+}
+```
+
+考虑到大小写，因此，如果搜索包含“ron”的所有名称，则会找到“Aaron”，而不是“Ronald”。 但是，如果您要搜索“no”，则可以同时匹配“Aaron”和“Ronald”。 字符串中的符文顺序无关紧要。
+
+可以搜索名称中带有任何提供的符文（而不是所有提供的符文）的人。 为此，请使用anyof代替allof：
+```
+{
+  q(func: anyof(name, rune, "mr")) {
+    name
+  }
+}
+=>
+{
+  "data": {
+    "q": [
+      { "name": "Adam" },
+      { "name": "Aaron" },
+      { "name": "Amy" }
+    ]
+  }
+}
+```
+"Ronald"不没有 m与r，所以它不会在查询 中找到
+
+```
+注意了解后台情况可以帮助您直观地了解应如何实施令牌方法。当Dgraph看到要由标记生成器索引的新边时，它将标记该值。生成的令牌用作发布列表的关键字。然后，将边主题添加到每个令牌的发布列表中。当发生查询根搜索时，搜索值将被标记化。搜索的结果是相应发布列表的并集或交集中的所有节点（取决于是否使用anyof或allof）。
+```
+
+### CIDR范围
+分词器不必总是将文本分割成多个组成部分。本示例将IP地址编入其CIDR范围。这使您可以搜索属于特定CIDR范围的所有IP地址。
+
+插件代码比符文示例更复杂。输入是存储为字符串的IP地址，例如“ 100.55.22.11/32”。输出是IP地址可能属于的CIDR范围。最多可以有32个不同的输出（“ 100.55.22.11/32”的确有32个可能的范围，每个掩码尺寸一个）。
+```
+package main
+
+import "net"
+
+func Tokenizer() interface{} { return CIDRTokenizer{} }
+
+type CIDRTokenizer struct{}
+
+func (CIDRTokenizer) Name() string     { return "cidr" }
+func (CIDRTokenizer) Type() string     { return "string" }
+func (CIDRTokenizer) Identifier() byte { return 0xff }
+
+func (t CIDRTokenizer) Tokens(value interface{}) ([]string, error) {
+	_, ipnet, err := net.ParseCIDR(value.(string))
+	if err != nil {
+		return nil, err
+	}
+	ones, bits := ipnet.Mask.Size()
+	var toks []string
+	for i := ones; i >= 1; i-- {
+		m := net.CIDRMask(i, bits)
+		tok := net.IPNet{
+			IP:   ipnet.IP.Mask(m),
+			Mask: m,
+		}
+		toks = append(toks, tok.String())
+	}
+	return toks, nil
+}
+```
+下面是个使用令牌器的例子。
+准备索引及数据
+```
+ip: string @index(cidr) .
+```
+
+```
+{
+  set{
+    _:a <ip> "100.55.22.11/32" .
+    _:b <ip> "100.33.81.19/32" .
+    _:c <ip> "100.49.21.25/32" .
+    _:d <ip> "101.0.0.5/32" .
+    _:e <ip> "100.176.2.1/32" .
+  }
+}
+```
+```
+{
+  q(func: allof(ip, cidr, "100.48.0.0/12")) {
+    ip
+  }
+}
+=>
+{
+  "data": {
+    "q": [
+      { "ip": "100.55.22.11/32" },
+      { "ip": "100.49.21.25/32" }
+    ]
+  }
+}
+```
+CIDR范围100.55.22.11/32和100.49.21.25/32均为100.48.0.0/12。数据库中的其他IP地址不包含在搜索结果中，因为它们对于12位掩码具有不同的CIDR范围（对于100.33.81.19/32，它们为100.32.0.0/12、101.0.0.0/12、100.154.0.0/12 ，101.0.0.5 / 32和100.176.2.1/32）。
+
+请注意，我们使用的是allof而不是anyof。只有allof可以与此索引一起正常工作。请记住，令牌生成器会为IP地址生成所有可能的CIDR范围。如果我们要使用anyof，那么搜索结果将包括1位掩码下的所有IP地址（在这种情况下为0.0.0.0/1，它将匹配此数据集中的所有IP）。
+
+字谜
+令牌生成器不必总是返回多个令牌。如果只想将数据索引到组中，则让分词器仅返回该组的标识成员。
+
+在此示例中，我们希望找到彼此字谜的词组。
+
+对应于一组字谜的标记可以是按顺序排列的字谜中的字母，如下所示：
+```
+package main
+
+import "sort"
+
+func Tokenizer() interface{} { return AnagramTokenizer{} }
+
+type AnagramTokenizer struct{}
+
+func (AnagramTokenizer) Name() string     { return "anagram" }
+func (AnagramTokenizer) Type() string     { return "string" }
+func (AnagramTokenizer) Identifier() byte { return 0xfc }
+
+func (t AnagramTokenizer) Tokens(value interface{}) ([]string, error) {
+	b := []byte(value.(string))
+	sort.Slice(b, func(i, j int) bool { return b[i] < b[j] })
+	return []string{string(b)}, nil
+}
+```
+接下来，再添加索引和数据
+
+```
+word: string @index(anagram) .
+```
+```
+{
+  set{
+    _:1 <word> "airmen" .
+    _:2 <word> "marine" .
+    _:3 <word> "beat" .
+    _:4 <word> "beta" .
+    _:5 <word> "race" .
+    _:6 <word> "care" .
+  }
+}
+```
+
+```
+{
+  q(func: allof(word, anagram, "remain")) {
+    word
+  }
+}
+=>
+{
+  "data": {
+    "q": [
+      { "word": "airmen" },
+      { "word": "marine" }
+    ]
+  }
+}
+```
+由于仅生成单个令牌，因此使用任何或全部无关紧要。 结果将始终相同。
+
+### 整数素数
+前面显示的所有自定义标记生成器都可以使用字符串。 但是，也可以使用其他数据类型。 该示例是人为设计的，但仍显示了自定义标记生成器的一些高级用法。
+
+令牌生成器为输入中的每个素数创建令牌。
+```
+package main
+
+import (
+    "encoding/binary"
+    "fmt"
+)
+
+func Tokenizer() interface{} { return FactorTokenizer{} }
+
+type FactorTokenizer struct{}
+
+func (FactorTokenizer) Name() string     { return "factor" }
+func (FactorTokenizer) Type() string     { return "int" }
+func (FactorTokenizer) Identifier() byte { return 0xfe }
+
+func (FactorTokenizer) Tokens(value interface{}) ([]string, error) {
+    x := value.(int64)
+    if x <= 1 {
+        return nil, fmt.Errorf("Cannot factor int <= 1: %d", x)
+    }
+    var toks []string
+    for p := int64(2); x > 1; p++ {
+        if x%p == 0 {
+            toks = append(toks, encodeInt(p))
+            for x%p == 0 {
+                x /= p
+            }
+        }
+    }
+    return toks, nil
+
+}
+
+func encodeInt(x int64) string {
+    var buf [binary.MaxVarintLen64]byte
+    n := binary.PutVarint(buf[:], x)
+    return string(buf[:n])
+}
+
+```
+```
+注意请注意，Type（）的返回值为“ int”，与Tokens输入的具体类型（即int64）相对应。
+```
+
+这使您可以执行诸如搜索与特定数字共享素数的所有数字的操作。
+
+特别是，我们搜索包含15的任何素数的数字，即任何可被3或5整除的数字。
+
+设置索引并添加数据：
+```
+num: int @index(factor) .
+```
+```
+{
+  set{
+    _:2 <num> "2"^^<xs:int> .
+    _:3 <num> "3"^^<xs:int> .
+    _:4 <num> "4"^^<xs:int> .
+    _:5 <num> "5"^^<xs:int> .
+    _:6 <num> "6"^^<xs:int> .
+    _:7 <num> "7"^^<xs:int> .
+    _:8 <num> "8"^^<xs:int> .
+    _:9 <num> "9"^^<xs:int> .
+    _:10 <num> "10"^^<xs:int> .
+    _:11 <num> "11"^^<xs:int> .
+    _:12 <num> "12"^^<xs:int> .
+    _:13 <num> "13"^^<xs:int> .
+    _:14 <num> "14"^^<xs:int> .
+    _:15 <num> "15"^^<xs:int> .
+    _:16 <num> "16"^^<xs:int> .
+    _:17 <num> "17"^^<xs:int> .
+    _:18 <num> "18"^^<xs:int> .
+    _:19 <num> "19"^^<xs:int> .
+    _:20 <num> "20"^^<xs:int> .
+    _:21 <num> "21"^^<xs:int> .
+    _:22 <num> "22"^^<xs:int> .
+    _:23 <num> "23"^^<xs:int> .
+    _:24 <num> "24"^^<xs:int> .
+    _:25 <num> "25"^^<xs:int> .
+    _:26 <num> "26"^^<xs:int> .
+    _:27 <num> "27"^^<xs:int> .
+    _:28 <num> "28"^^<xs:int> .
+    _:29 <num> "29"^^<xs:int> .
+    _:30 <num> "30"^^<xs:int> .
+  }
+}
+
+```
+```
+{
+  q(func: anyof(num, factor, 15)) {
+    num
+  }
+}
+=>
+{
+  "data": {
+    "q": [
+      { "num": 3 },
+      { "num": 5 },
+      { "num": 6 },
+      { "num": 9 },
+      { "num": 10 },
+      { "num": 12 },
+      { "num": 15 },
+      { "num": 18 }
+      { "num": 20 },
+      { "num": 21 },
+      { "num": 25 },
+      { "num": 24 },
+      { "num": 27 },
+      { "num": 30 },
+    ]
+  }
+}
+```
+
