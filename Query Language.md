@@ -5052,3 +5052,110 @@ schema(type: Movie) {}
 schema(type: [Person, Animal]) {}
 ```
 请注意，类型查询在花括号之间不包含任何内容。输出将是所请求类型的完整定义。
+
+### 类型系统
+Dgraph支持一种类型系统，该系统可用于对节点进行分类并根据其类型查询它们。在扩展查询期间也使用类型系统。
+
+### 类型定义
+使用类似于GraphQL的语法定义类型。例如：
+```
+type Student {
+  name
+  dob
+  home_address
+  year
+  friends
+}
+```
+```
+请注意，您无法定义以dgraph开头的类型名称。它是Dgraph内部类型/谓词的命名空间。例如，将dgraph.Student定义为类型无效。
+```
+
+类型与模式是通过变更端点操作一起声明的。为了正确地支持上述类型，还需要该类型中每个属性的谓词，例如：
+```
+name: string @index(term) .
+dob: datetime .
+home_address: string .
+year: int .
+friends: [uid] .
+```
+反向谓词也可以包含在类型定义中。例如，如果有一个谓词的孩子有一个反面的边，则上面的类型可以扩展为包括学生的父母（谓词名称周围的方括号需要正确理解特殊字符〜）。
+
+```
+children: [uid] @reverse .
+
+type Student {
+  name
+  dob
+  home_address
+  year
+  friends
+  <~children>
+}
+```
+边可以用于多种类型：例如，name可能同时用于人和宠物。但是，有时候，对于每种类型，都需要使用不同的谓词来表示相似的概念。例如，如果学生名和书名要求不同的索引，则谓词必须不同。
+```
+type Student {
+  student_name
+}
+
+type Textbook {
+  textbook_name
+}
+
+student_name: string @index(exact) .
+textbook_name: string @lang @index(fulltext) .
+```
+更改已存在类型的模式，将覆盖现有类型定义。
+
+### 设置节点的类型
+标量节点不能具有类型，因为它们仅具有一个属性，并且其类型是节点的类型。 UID节点可以具有类型。通过为该节点设置dgraph.type谓词的值来设置类型。一个节点可以具有多种类型。这是一个有关如何设置节点类型的示例：
+```
+{
+  set {
+    _:a <name> "Garfield" .
+    _:a <dgraph.type> "Pet" .
+    _:a <dgraph.type> "Animal" .
+  }
+}
+```
+dgraph.type是保留的谓词，不能删除或修改。
+
+### 在查询中使用类型
+类型可以用作查询语言中的顶级功能。例如：
+```
+{
+  q(func: type(Animal)) {
+    uid
+    name
+  }
+}
+```
+该查询将仅返回类型设置为Animal的节点。
+
+类型也可以用于过滤查询中的结果。例如：
+```
+{
+  q(func: has(parent)) {
+    uid
+    parent @filter(type(Person)) {
+      uid
+      name
+    }
+  }
+}
+```
+此查询将返回具有父谓词且父类型为Person的节点。
+
+### 删除类型
+可以使用变更端点来删除类型定义。所要做的就是将操作对象的字段DropOp（或drop_op，这取决于客户端）发送给枚举值TYPE，将字段“ DropValue”（或drop_value）发送给要删除的类型。
+
+下面是使用Go客户端删除Person类型的示例：
+```
+err := c.Alter(context.Background(), &api.Operation{
+                DropOp: api.Operation_TYPE,
+                DropValue: "Person"})
+```
+### 扩展查询和类型
+使用expand（即expand(_all_)）的查询，要求要扩展的节点具有类型。
+
